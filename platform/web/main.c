@@ -151,36 +151,39 @@ static void draw_mesh(const gpu_mesh *g, const float *mvp)
 }
 
 /* Same transforms as the PC port's draw_scene (see view in world.h). */
-static void draw_scene(const world *w, const view *v)
+static void draw_scene(const world *w, const camera *c)
 {
+    const view *v = &c->now;
     glViewport(0, 0, frame_w, SCREEN_H);
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     /* glFrustum(-r, r, -t, t, n, f): same vertical view everywhere; wider sees more. */
     const float n = 0.2f, f = 100.0f, t = 0.1f, r = t * frame_w / SCREEN_H;
-    float cam[16] = {n / r, 0, 0, 0, 0, n / t, 0, 0, 0, 0, -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0};
-    translate(cam, 0, 0, -v->dist / 1000.0f);
-    rotate_x(cam, v->pitch);
-    rotate_y(cam, -v->yaw);
-    translate(cam, -v->x / 1000.0f, -v->y / 1000.0f, -v->z / 1000.0f);
-    draw_mesh(&gpu_level, cam);
+    float vp[16] = {n / r, 0, 0, 0, 0, n / t, 0, 0, 0, 0, -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0};
+    translate(vp, 0, 0, -v->dist / 1000.0f);
+    rotate_x(vp, v->pitch);
+    rotate_y(vp, -v->yaw);
+    translate(vp, -v->x / 1000.0f, -v->y / 1000.0f, -v->z / 1000.0f);
+    draw_mesh(&gpu_level, vp);
 
     for (int i = 0; i < pl.part_count; i++) {
         const part *q = &pl.parts[i];
         if (q->mesh < 0)
             continue;
         float m[16];
-        memcpy(m, cam, sizeof m);
+        memcpy(m, vp, sizeof m);
         translate(m, q->x / 1000.0f, FLOOR_Y + (q->y - q->sy / 2) / 1000.0f, q->z / 1000.0f);
         draw_mesh(&gpu_place[q->mesh], m);
     }
 
     for (int i = 0; i < w->player_count; i++) {
+        if (camera_hides(c, i))
+            continue;
         const player *p = &w->players[i];
         pose pz = player_pose(p);
         float m[16];
-        memcpy(m, cam, sizeof m);
+        memcpy(m, vp, sizeof m);
         translate(m, p->x / 1000.0f, FLOOR_Y + (p->y + pz.lift) / 1000.0f, p->z / 1000.0f);
         rotate_y(m, p->heading);
         for (int k = 0; k < AVATAR_PARTS; k++) { /* each part turns about its joint */
@@ -261,7 +264,7 @@ static void present(SDL_Window *win)
     glBindFramebuffer(GL_FRAMEBUFFER, frame_fbo);
 }
 
-/* WASD moves, Space jumps, Shift runs, arrows orbit, Q/E zoom in/out. */
+/* WASD moves, Space jumps, Shift runs, arrows orbit, Q switches the camera, Z/X zoom in/out. */
 static unsigned read_input(void)
 {
     const bool *k = SDL_GetKeyboardState(NULL);
@@ -274,8 +277,9 @@ static unsigned read_input(void)
     if (k[SDL_SCANCODE_RIGHT]) in |= CAM_RIGHT;
     if (k[SDL_SCANCODE_UP])    in |= CAM_UP;
     if (k[SDL_SCANCODE_DOWN])  in |= CAM_DOWN;
-    if (k[SDL_SCANCODE_Q])     in |= CAM_IN;
-    if (k[SDL_SCANCODE_E])     in |= CAM_OUT;
+    if (k[SDL_SCANCODE_Z])     in |= CAM_IN;
+    if (k[SDL_SCANCODE_X])     in |= CAM_OUT;
+    if (k[SDL_SCANCODE_Q])     in |= CAM_MODE;
     if (k[SDL_SCANCODE_SPACE]) in |= JUMP;
     if (k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT]) in |= RUN;
     return in;
@@ -285,23 +289,35 @@ static SDL_Window *win;
 static world w;
 static camera cam;
 static ticker tk;
+static float mouse_x, mouse_y; /* movement not yet used by a tick */
 
 /* The browser owns the loop and calls this once per display frame. */
 static void frame(void)
 {
     SDL_Event e;
-    while (SDL_PollEvent(&e))
-        ;
+    while (SDL_PollEvent(&e)) {
+        /* Clicking captures the mouse for the camera (pointer lock); the browser's Esc lets it go. */
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+            SDL_SetWindowRelativeMouseMode(win, true);
+        if (e.type == SDL_EVENT_MOUSE_MOTION && SDL_GetWindowRelativeMouseMode(win))
+            mouse_x += e.motion.xrel, mouse_y += e.motion.yrel;
+    }
+    int n = ticker_due(&tk, SDL_GetTicksNS() / 1000);
     unsigned b = read_input();
-    for (int n = ticker_due(&tk, SDL_GetTicksNS() / 1000); n > 0; n--) {
-        input in[MAX_PLAYERS] = {{b, cam.now.yaw}};
+    int look_x = 0, look_y = 0; /* the mouse moved since the last tick, spread over the ticks due */
+    if (n) {
+        look_from_motion((int)(mouse_x / n), (int)(mouse_y / n), &look_x, &look_y);
+        mouse_x = mouse_y = 0;
+    }
+    for (; n > 0; n--) {
+        input in[MAX_PLAYERS] = {{b, cam.now.yaw, look_x, look_y}};
         w = world_update(w, in);
-        cam = camera_update(cam, b, &w.players[0]);
+        cam = camera_update(cam, in[0], &w);
     }
     int pw, ph;
     SDL_GetWindowSizeInPixels(win, &pw, &ph);
     size_frame(screen_width(pw, ph));
-    draw_scene(&w, &cam.now);
+    draw_scene(&w, &cam);
     present(win);
     SDL_GL_SwapWindow(win);
 }

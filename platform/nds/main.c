@@ -44,7 +44,7 @@ static uint64_t now_us(void)
     return total / BUS_CLOCK * 1000000 + total % BUS_CLOCK * 1000000 / BUS_CLOCK;
 }
 
-/* D-pad moves, A jumps, B runs, R + D-pad orbits, X/Y zoom in/out. */
+/* D-pad moves, A jumps, B runs, R + D-pad orbits, X/Y zoom in/out, L switches the camera. */
 static unsigned read_input(u32 keys)
 {
     unsigned in = 0;
@@ -57,6 +57,7 @@ static unsigned read_input(u32 keys)
     if (keys & KEY_B)     in |= RUN;
     if (keys & KEY_X)     in |= CAM_IN;
     if (keys & KEY_Y)     in |= CAM_OUT;
+    if (keys & KEY_L)     in |= CAM_MODE;
     return in;
 }
 
@@ -102,7 +103,7 @@ int main(void)
 {
     videoSetMode(MODE_0_3D);
     consoleDemoInit(); /* text console on the bottom screen */
-    printf("hangout64\n\nD-pad:     move\nA:         jump\nB:         run\nR + D-pad: orbit\nX/Y:       zoom\nSTART:     exit\n");
+    printf("hangout64\n\nD-pad:     move\nA:         jump\nB:         run\nR + D-pad: orbit\nX/Y:       zoom\nL:         camera\nSTART:     exit\n");
     glInit();
     glClearColor(3, 3, 5, 31);
     glClearPolyID(63);
@@ -150,6 +151,8 @@ int main(void)
         }
 
         for (int i = 0; i < w.player_count; i++) {
+            if (camera_hides(&cam, i))
+                continue;
             const player *p = &w.players[i];
             glPushMatrix();
             pose pz = player_pose(p);
@@ -171,9 +174,9 @@ int main(void)
         swiWaitForVBlank();
         unsigned b = read_input(keysHeld());
         for (int n = ticker_due(&tk, now_us()); n > 0; n--) {
-            input in[MAX_PLAYERS] = {{b, cam.now.yaw}};
+            input in[MAX_PLAYERS] = {{b, cam.now.yaw, 0, 0}};
             w = world_update(w, in);
-            cam = camera_update(cam, b, &w.players[0]);
+            cam = camera_update(cam, in[0], &w);
         }
     }
     return 0;

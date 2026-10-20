@@ -76,6 +76,8 @@ typedef struct {
     int mesh_count;
     texture *textures;
     int texture_count;
+    int has_camera;
+    int camera[3]; /* where the scene's fixed camera stands (y from the floor), if it has one */
 } place;
 
 enum {
@@ -108,13 +110,19 @@ enum {
     MOVE_LEFT = 1 << 0, MOVE_RIGHT = 1 << 1, MOVE_FWD = 1 << 2, MOVE_BACK = 1 << 3,
     CAM_LEFT = 1 << 4, CAM_RIGHT = 1 << 5, CAM_UP = 1 << 6, CAM_DOWN = 1 << 7,
     CAM_IN = 1 << 8, CAM_OUT = 1 << 9, JUMP = 1 << 10, RUN = 1 << 11,
+    CAM_MODE = 1 << 12, /* switches the camera between third and first person when pressed */
 };
 
-/* One player's input for a tick: buttons plus the yaw of the camera they're looking
- * through, so "forward" means into their screen. */
+/* One player's input for a tick: buttons, the yaw of the camera they're looking through (so
+ * "forward" means into their screen), and an analog look stick (or a mouse, see
+ * look_from_motion): -LOOK_FULL..LOOK_FULL each way, right and down positive. It adds to the
+ * orbit buttons, which count as pushed all the way, and together they never turn the camera
+ * faster than one stick pushed all the way. */
+#define LOOK_FULL 1000
 typedef struct {
     unsigned buttons;
     int yaw;
+    int look_x, look_y;
 } input;
 
 #define PLAYER_RADIUS 350  /* collision box half-width */
@@ -201,36 +209,72 @@ int ticker_due(ticker *t, uint64_t now_us);
 /* Advance one tick; inputs[i] drives players[i]. */
 world world_update(world w, const input inputs[MAX_PLAYERS]);
 
-/* A camera is per viewer, not game state. It follows one player and eases toward
- * the orbit/zoom target set by that viewer's buttons. After a moment of walking one way,
- * it slowly swings round behind them (not when they walk toward it). Platforms render with:
+/* A camera is per viewer, not game state. It views a subject, by default the viewer's player,
+ * in one of three modes:
+ *   CAM_THIRD  from behind, easing after the subject so they stay in frame; after a moment of
+ *              a player walking one way it swings round behind them (not when they walk
+ *              toward it). The orbit and zoom buttons move it around them.
+ *   CAM_FIRST  from the subject's eyes; the orbit buttons look around.
+ *   CAM_FIXED  detached: it stands still at `anchor` and turns to keep the subject in view.
+ * CAM_MODE cycles through them (easing across, except into CAM_FIXED, which cuts), offering
+ * CAM_FIXED only where the scene has a fixed camera. The subject can also be another player,
+ * a part (riding on its top) or a fixed point: set `subject`.
+ * Platforms render with:
  *   view:   translate(0, 0, -dist) rotateX(pitch) rotateY(-yaw) translate(-x, -y, -z)
  *   level:  as is
- *   player: see avatar_parts above                                                  */
+ *   player: see avatar_parts above; skip any player camera_hides()                      */
 typedef struct {
-    int x, y, z; /* point it looks at: their shoulders over the ground they stand on, plus half of a jump */
+    int x, y, z; /* point it looks at (third person) or from (first person, dist 0) */
     int yaw;     /* increasing moves the camera right; not wrapped */
     int pitch;   /* positive looks down from above */
     int dist;
 } view;
 
+enum { CAM_THIRD, CAM_FIRST, CAM_FIXED };
+enum { SUBJECT_PLAYER, SUBJECT_PART, SUBJECT_POINT };
+typedef struct {
+    int kind;    /* SUBJECT_* */
+    int index;   /* which player or part */
+    int x, y, z; /* a point: where its "feet" are, y from the floor (thousandths) */
+} subject;
+
 typedef struct {
     view now, target;
-    int ground; /* height of the last thing the followed player stood on */
+    int mode;   /* CAM_* */
+    subject subject;
+    int anchor[3]; /* where a CAM_FIXED camera stands, in view coordinates */
+    int zoom;   /* third-person distance */
+    int mode_held; /* CAM_MODE was held last tick: it switches on a press */
+    int ground; /* height of the last thing a followed player stood on */
     int last_x, last_z, last_heading, walked; /* ticks they've walked one way */
 } camera;
 
 #define CAM_PITCH_MAX 800
-#define CAM_PITCH_MIN -40 /* looking up a little; zoomed out, the camera stays a unit above the floor */
+#define CAM_PITCH_MIN -40 /* looking up a little; zoomed out, the camera stays above the floor */
+#define CAM_LOOK_MAX 700  /* first person looks up or down this far */
 #define CAM_FOCUS 300     /* views aren't offset by FLOOR_Y, so this looks 1.3 above the feet: the head */
-#define CAM_DIST_MIN 3000
-#define CAM_DIST_MAX 12000
+#define CAM_EYE 250       /* and first person sees from 1.25 above the feet: the eyes */
+#define CAM_DIST_MIN 2500
+#define CAM_DIST_MAX 9000
+#define CAM_DIST 5500     /* third-person distance to start with */
 
-camera camera_init(void);
-camera camera_update(camera c, unsigned buttons, const player *follow);
+camera camera_init(void); /* third person, on player 0 */
+camera camera_update(camera c, input in, const world *w);
 
-/* sin/cos of whole degrees, scaled by 4096 (integer-only for the DS). */
+/* Whether a platform should leave this player out: the camera is looking from their eyes. */
+int camera_hides(const camera *c, int player);
+
+/* A pointer's movement over one tick (pixels, right and down positive) as a look stick:
+ * MOUSE_FULL pixels or more is pushed all the way that way, less is pushed part way. Like a
+ * stick, a mouse never turns the camera faster than full speed. */
+#define MOUSE_FULL 24
+void look_from_motion(int dx, int dy, int *look_x, int *look_y);
+
+/* sin/cos of whole degrees, scaled by 4096 (integer-only for the DS); the angle of (x, y)
+ * from the x axis toward y, in tenths of a degree (-1800..1800); square root. */
 int isin(int deg);
 int icos(int deg);
+int iatan2(int y, int x);
+long long isqrt(long long v);
 
 #endif

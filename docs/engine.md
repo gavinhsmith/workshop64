@@ -196,14 +196,26 @@ input.bind("jump", "a")
 
 Today's mapping, which becomes the default controller:
 
-| Platform | Move | Jump | Run | Orbit | Zoom | Menu |
-|---|---|---|---|---|---|---|
-| PC, web | WASD | Space | Shift | Arrows | Q / E | Esc |
-| N64 | Stick | A | B | D-pad | C-up / C-down | Start |
-| GameCube | Stick | A | B | C-stick / D-pad | L / R | Start |
-| Wii Remote | D-pad | A | 1 | B + D-pad | − / + | Home |
-| DS | D-pad | A | B | R + D-pad | X / Y | Start |
-| 3DS | Circle pad | A | B | D-pad | L / R | Start |
+| Platform | Move | Jump | Run | Orbit | Zoom | Camera mode | Menu |
+|---|---|---|---|---|---|---|---|
+| PC, web | WASD | Space | Shift | Arrows, mouse | Z / X | Q | Esc |
+| N64 | Stick | A | B | D-pad | C-up / C-down | R | Start |
+| GameCube | Stick | A | B | C-stick / D-pad | L / R | Z | Start |
+| Wii Remote | D-pad | A | 1 | B + D-pad | − / + | 2 | Home |
+| DS | D-pad | A | B | R + D-pad | X / Y | L | Start |
+| 3DS | Circle pad | A | B | D-pad | L / R | X | Start |
+
+The camera takes an analog look stick as well as the orbit buttons: pushed part way it turns
+part way, and the buttons count as pushed all the way. The mouse on PC and web is read as that
+stick, by how far it moves each tick, capped at all the way, so mouse players turn no faster
+than anyone else. *Decided.*
+
+The camera (engine-run for now; experiences will control it through the Lua API) has three
+modes: third person, following behind and swinging round as the player walks; first person
+from the eyes; and fixed, detached at a spot in the scene and turning to keep the player in
+view. A scene gives its fixed camera's spot with `camera = {x, y, z}` (units, y from the floor).
+The camera can also view something other than the player (another player, or riding on a part).
+The camera button cycles the modes.
 
 ## 9. Assets
 
@@ -399,6 +411,7 @@ return {
 -- scenes/course.lua
 return {
     sky = {120, 170, 230}, fog = {120, 170, 230}, draw_distance = 60, kill_y = -20,
+    camera = {9, 6, 9},        -- optional: where the fixed camera stands
     script = "course",         -- optional: scripts/server/course.lua runs while this scene is loaded
 
     {name = "baseplate", pos = {0, -0.5, 0}, size = {40, 1, 40}, color = {90, 150, 90}, material = "grass"},
@@ -643,7 +656,7 @@ What hangout64 already has, and what changes:
 | Platforms, CI | All seven (with the web) build in Docker/CI, releases on tags | Keep |
 | Maths | Integer core, `isin`/`icos` | Keep |
 | World | Fixed 20×20 floor + up to 256 unrotated box parts | Parts only, baseplate as a part, wedges, 45° rotation, scene settings |
-| Content | `experiences/course/` (§11.6) packed into a `.wb64` with logic, canonical textures and models; built in. Scenes take parts and groups (no rotation, wedges or scene settings yet); one scene per experience | Variants, sessions with several scenes, the rest of §11.6 |
+| Content | `experiences/course/` (§11.6) packed into a `.wb64` with logic, canonical textures and models; built in. Scenes take parts, groups and a fixed camera spot (no rotation, wedges or other scene settings yet); one scene per experience | Variants, sessions with several scenes, the rest of §11.6 |
 | Assets | OBJ models, 16-colour PNG textures converted on load | Canonical forms + tool-made variants; collision in models |
 | Rendering | Each `main.c` draws the level itself | Core draw list; ports render it their own way |
 | Timing | Fixed 30 Hz tick on every platform (`ticker_due` in the core); drawn at display rate without interpolation | Keep; interpolate where a port can afford it |

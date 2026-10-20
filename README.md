@@ -20,21 +20,33 @@ This is the prototype for **workbench64**, a small Roblox-like platform; see the
 
 ## Controls
 
-The figure walks around a checkered floor and turns to face where it's going; the camera
-eases after him. Movement is relative to the camera (forward = into the screen). Orbit and
-zoom ease too. Walk one way for a moment and the camera slowly swings round behind him
-(except when he's walking toward it).
+The figure walks around a checkered floor and turns to face where it's going. Movement is
+relative to the camera (forward = into the screen). The camera has three modes, cycled with
+the camera button:
 
-| Platform | Move | Jump | Run | Orbit camera | Zoom in / out | Exit |
-|---|---|---|---|---|---|---|
-| PC, web | WASD | Space | Shift | Arrows | Q / E | Esc (PC) |
-| N64 | Stick | A | B | D-pad | C-up / C-down | — |
-| GameCube | Stick | A | B | C-stick / D-pad | L / R | START |
-| Wii Remote | D-pad | A | 1 | B + D-pad | − / + | HOME |
-| DS | D-pad | A | B | R + D-pad | X / Y | START |
-| 3DS | Circle pad | A | B | D-pad | L / R | START |
+- **Third person** (the start): behind the figure, easing after it so it stays in frame.
+  Walk one way for a moment and the camera swings round behind it (except when it's walking
+  toward the camera). Orbit and zoom move the camera around it.
+- **First person**: from its eyes; orbit looks around. Switching eases the camera in or out.
+- **Fixed**: high in a corner of the course, standing still and turning to keep the figure in
+  view, like an old Resident Evil camera. A scene sets where with `camera = {x, y, z}`; scenes
+  without one skip this mode.
+
+| Platform | Move | Jump | Run | Orbit / look | Zoom in / out | Camera | Exit |
+|---|---|---|---|---|---|---|---|
+| PC, web | WASD | Space | Shift | Arrows or mouse | Z / X | Q | Esc (PC) |
+| N64 | Stick | A | B | D-pad | C-up / C-down | R | — |
+| GameCube | Stick | A | B | C-stick / D-pad | L / R | Z | START |
+| Wii Remote | D-pad | A | 1 | B + D-pad | − / + | 2 | HOME |
+| DS | D-pad | A | B | R + D-pad | X / Y | L | START |
+| 3DS | Circle pad | A | B | D-pad | L / R | X | START |
 
 On the Wii a GameCube pad works too, with the GameCube layout.
+
+On PC and web, click to capture the mouse for the camera; Esc lets it go (on PC, Esc again
+quits). The mouse works like the GameCube's C-stick: moving it a little turns the camera a
+little, and moving it fast turns it at full stick speed but never faster, so it's no faster
+than a controller.
 
 On PC, F11 toggles fullscreen. The window can be any size: the picture is drawn 240 lines high
 and as wide as the window's shape (4:3 or wider), then scaled to fill it. The web build does the

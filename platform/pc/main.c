@@ -37,7 +37,7 @@ static void upload_textures(void)
     }
 }
 
-/* WASD moves, Space jumps, arrows orbit, Q/E zoom in/out. */
+/* WASD moves, Space jumps, Shift runs, arrows orbit, Q switches the camera, Z/X zoom in/out. */
 static unsigned read_input(void)
 {
     const bool *k = SDL_GetKeyboardState(NULL);
@@ -50,8 +50,9 @@ static unsigned read_input(void)
     if (k[SDL_SCANCODE_RIGHT]) in |= CAM_RIGHT;
     if (k[SDL_SCANCODE_UP])    in |= CAM_UP;
     if (k[SDL_SCANCODE_DOWN])  in |= CAM_DOWN;
-    if (k[SDL_SCANCODE_Q])     in |= CAM_IN;
-    if (k[SDL_SCANCODE_E])     in |= CAM_OUT;
+    if (k[SDL_SCANCODE_Z])     in |= CAM_IN;
+    if (k[SDL_SCANCODE_X])     in |= CAM_OUT;
+    if (k[SDL_SCANCODE_Q])     in |= CAM_MODE;
     if (k[SDL_SCANCODE_SPACE]) in |= JUMP;
     if (k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT]) in |= RUN;
     return in;
@@ -80,8 +81,9 @@ static void draw_mesh(const mesh *m)
 }
 
 /* Drawn sw x SCREEN_H in the corner of the back buffer, then scaled up by present(). */
-static void draw_scene(const world *w, const view *v, int sw)
+static void draw_scene(const world *w, const camera *cam, int sw)
 {
+    const view *v = &cam->now;
     glViewport(0, 0, sw, SCREEN_H);
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -112,6 +114,8 @@ static void draw_scene(const world *w, const view *v, int sw)
     }
 
     for (int i = 0; i < w->player_count; i++) {
+        if (camera_hides(cam, i))
+            continue;
         const player *p = &w->players[i];
         glPushMatrix();
         pose pz = player_pose(p);
@@ -200,25 +204,41 @@ int main(int argc, char **argv)
     upload_textures();
     camera cam = camera_init();
     ticker tk = {0};
+    float mouse_x = 0, mouse_y = 0; /* movement not yet used by a tick */
     for (;;) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_EVENT_QUIT ||
-                (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE))
+            if (e.type == SDL_EVENT_QUIT)
                 goto done;
+            /* Clicking captures the mouse for the camera; Esc lets it go, and quits if it's free. */
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+                SDL_SetWindowRelativeMouseMode(win, true);
+            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
+                if (!SDL_GetWindowRelativeMouseMode(win))
+                    goto done;
+                SDL_SetWindowRelativeMouseMode(win, false);
+            }
+            if (e.type == SDL_EVENT_MOUSE_MOTION && SDL_GetWindowRelativeMouseMode(win))
+                mouse_x += e.motion.xrel, mouse_y += e.motion.yrel;
             if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_F11 && !e.key.repeat)
                 SDL_SetWindowFullscreen(win, !(SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN));
         }
+        int n = ticker_due(&tk, SDL_GetTicksNS() / 1000);
         unsigned b = read_input();
-        for (int n = ticker_due(&tk, SDL_GetTicksNS() / 1000); n > 0; n--) {
-            input in[MAX_PLAYERS] = {{b, cam.now.yaw}};
+        int look_x = 0, look_y = 0; /* the mouse moved since the last tick, spread over the ticks due */
+        if (n) {
+            look_from_motion((int)(mouse_x / n), (int)(mouse_y / n), &look_x, &look_y);
+            mouse_x = mouse_y = 0;
+        }
+        for (; n > 0; n--) {
+            input in[MAX_PLAYERS] = {{b, cam.now.yaw, look_x, look_y}};
             w = world_update(w, in);
-            cam = camera_update(cam, b, &w.players[0]);
+            cam = camera_update(cam, in[0], &w);
         }
         int pw, ph;
         SDL_GetWindowSizeInPixels(win, &pw, &ph);
         int sw = screen_width(pw, ph);
-        draw_scene(&w, &cam.now, sw);
+        draw_scene(&w, &cam, sw);
         present(win, tex, sw);
     }
 done:

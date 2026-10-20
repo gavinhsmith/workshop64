@@ -70,20 +70,6 @@ static int16_t face_uvs[PART_TRIS * 3][2];
 static uint8_t colors[MAX_PLAYERS][AVATAR_PARTS][PART_TRIS][3];
 mesh avatar_parts[MAX_PLAYERS][AVATAR_PARTS];
 
-static long long isqrt(long long v)
-{
-    long long r = 0;
-    for (long long bit = 1LL << 62; bit; bit >>= 2) {
-        if (v >= r + bit) {
-            v -= r + bit;
-            r = (r >> 1) + bit;
-        } else {
-            r >>= 1;
-        }
-    }
-    return r;
-}
-
 /* sin and cos of t tenths of a degree, scaled by 4096. */
 static int sin10(int t)
 {

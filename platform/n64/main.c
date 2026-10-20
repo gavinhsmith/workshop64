@@ -48,7 +48,7 @@ static void bind_texture(const mesh *m)
     }
 }
 
-/* Stick moves, A jumps, D-pad orbits, C-up/C-down zoom in/out. */
+/* Stick moves, A jumps, B runs, D-pad orbits, C-up/C-down zoom in/out, R switches the camera. */
 static unsigned read_input(void)
 {
     joypad_poll();
@@ -65,6 +65,7 @@ static unsigned read_input(void)
     if (b.d_down)  bits |= CAM_DOWN;
     if (b.c_up)    bits |= CAM_IN;
     if (b.c_down)  bits |= CAM_OUT;
+    if (b.r)       bits |= CAM_MODE;
     if (b.a)       bits |= JUMP;
     if (b.b)       bits |= RUN;
     return bits;
@@ -152,6 +153,8 @@ int main(void)
         }
 
         for (int i = 0; i < w.player_count; i++) {
+            if (camera_hides(&cam, i))
+                continue;
             const player *p = &w.players[i];
             glPushMatrix();
             pose pz = player_pose(p);
@@ -175,9 +178,9 @@ int main(void)
         rdpq_detach_show();
         unsigned b = read_input();
         for (int n = ticker_due(&tk, get_ticks_us()); n > 0; n--) {
-            input in[MAX_PLAYERS] = {{b, cam.now.yaw}};
+            input in[MAX_PLAYERS] = {{b, cam.now.yaw, 0, 0}};
             w = world_update(w, in);
-            cam = camera_update(cam, b, &w.players[0]);
+            cam = camera_update(cam, in[0], &w);
         }
     }
 }

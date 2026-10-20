@@ -12,7 +12,7 @@ mesh level_mesh = {.verts = level_verts, .colors = level_colors};
 #define MOVE_SPEED 120 /* thousandths of a unit per tick: 3.6 units a second */
 #define RUN_SPEED 220
 #define DIAGONAL 2896 /* 1/sqrt(2), scaled by 4096 */
-#define ORBIT_SPEED 40
+#define ORBIT_SPEED 70 /* tenths of a degree per tick: 210 degrees a second */
 #define ZOOM_SPEED 200
 #define JUMP_SPEED 200 /* peaks about 1.15 units up after 0.4 s */
 #define GRAVITY 16
@@ -257,40 +257,135 @@ world world_update(world w, const input inputs[MAX_PLAYERS])
 
 camera camera_init(void)
 {
-    view v = {0, CAM_FOCUS, 0, 0, 150, 6000};
-    return (camera){.now = v, .target = v};
+    view v = {0, CAM_FOCUS, 0, 0, 150, CAM_DIST};
+    return (camera){.now = v, .target = v, .mode = CAM_THIRD, .zoom = CAM_DIST};
 }
 
-camera camera_update(camera c, unsigned buttons, const player *follow)
+long long isqrt(long long v)
 {
-    c.target.x = follow->x;
-    /* Follow the ground they stand on fully, but only half of a jump, so they stay in
-     * frame and you still see the height. Dropping below it (walking off) counts too. */
-    if (follow->on_ground || follow->y < c.ground)
-        c.ground = follow->y;
-    c.target.y = c.ground + (follow->y - c.ground) / 2 + CAM_FOCUS;
-    c.target.z = follow->z;
-    if (buttons & CAM_LEFT)  c.target.yaw -= ORBIT_SPEED;
-    if (buttons & CAM_RIGHT) c.target.yaw += ORBIT_SPEED;
-    if (buttons & CAM_UP)    c.target.pitch += ORBIT_SPEED;
-    if (buttons & CAM_DOWN)  c.target.pitch -= ORBIT_SPEED;
-    if (buttons & CAM_IN)    c.target.dist -= ZOOM_SPEED;
-    if (buttons & CAM_OUT)   c.target.dist += ZOOM_SPEED;
-    c.target.pitch = clamp(c.target.pitch, CAM_PITCH_MIN, CAM_PITCH_MAX);
+    long long r = 0;
+    for (long long bit = 1LL << 62; bit; bit >>= 2) {
+        if (v >= r + bit) {
+            v -= r + bit;
+            r = (r >> 1) + bit;
+        } else {
+            r >>= 1;
+        }
+    }
+    return r;
+}
 
-    /* Walking one way (moving, and facing within a few degrees of last tick, which
-     * allows for the camera's own turning) for a while swings the camera behind them,
-     * unless they're walking toward it or you're orbiting. */
-    int moved = follow->x != c.last_x || follow->z != c.last_z;
-    int steady = abs(wrap3600(follow->target_heading - c.last_heading + 1800) - 1800) < 50;
-    c.walked = moved && steady && !(buttons & (CAM_LEFT | CAM_RIGHT)) ? c.walked + 1 : 0;
-    c.last_x = follow->x;
-    c.last_z = follow->z;
-    c.last_heading = follow->target_heading;
-    int behind = wrap3600(follow->target_heading - c.target.yaw + 1800) - 1800;
-    if (c.walked > BEHIND_DELAY && abs(behind) < 1350)
-        c.target.yaw += clamp(behind, -BEHIND_SPEED, BEHIND_SPEED);
-    c.target.dist = clamp(c.target.dist, CAM_DIST_MIN, CAM_DIST_MAX);
+int iatan2(int y, int x)
+{
+    if (!x && !y)
+        return 0;
+    long long ax = llabs(x), ay = llabs(y);
+    long long t = ax > ay ? ay * 4096 / ax : ax * 4096 / ay; /* tan of the angle to the nearer axis */
+    /* atan(t) = 45t + t(1 - t)(14.02 + 3.80t) degrees on [0, 1], within about 0.1 degree */
+    int a = (int)(450 * t / 4096 + t * (4096 - t) / 4096 * (1402 + 380 * t / 4096) / 40960);
+    if (ay > ax)
+        a = 900 - a;
+    if (x < 0)
+        a = 1800 - a;
+    return y < 0 ? -a : a;
+}
+
+void look_from_motion(int dx, int dy, int *look_x, int *look_y)
+{
+    dx = clamp(dx, -10000, 10000), dy = clamp(dy, -10000, 10000); /* no overflow; capped below anyway */
+    *look_x = dx * LOOK_FULL / MOUSE_FULL;
+    *look_y = dy * LOOK_FULL / MOUSE_FULL;
+}
+
+int camera_hides(const camera *c, int player)
+{
+    /* Only once it's close: while easing in from third person you still see them. */
+    return c->mode == CAM_FIRST && c->subject.kind == SUBJECT_PLAYER && c->subject.index == player &&
+           c->now.dist < 800;
+}
+
+camera camera_update(camera c, input in, const world *w)
+{
+    unsigned buttons = in.buttons;
+    if ((buttons & CAM_MODE) && !c.mode_held) {
+        int fixed = level && level->has_camera;
+        c.mode = c.mode == CAM_THIRD ? CAM_FIRST : c.mode == CAM_FIRST && fixed ? CAM_FIXED : CAM_THIRD;
+        c.target.pitch = c.mode == CAM_FIRST ? 0 : 150; /* level eyes; looking down on them */
+        if (c.mode == CAM_FIXED) {
+            c.anchor[0] = level->camera[0];
+            c.anchor[1] = FLOOR_Y * 1000 + level->camera[1]; /* views aren't offset by FLOOR_Y */
+            c.anchor[2] = level->camera[2];
+        }
+    }
+    c.mode_held = !!(buttons & CAM_MODE);
+
+    /* Where the subject's feet are; a player also says whether they're grounded. */
+    const player *follow = NULL;
+    int x = c.subject.x, y = c.subject.y, z = c.subject.z;
+    if (c.subject.kind == SUBJECT_PLAYER && c.subject.index >= 0 && c.subject.index < w->player_count) {
+        follow = &w->players[c.subject.index];
+        x = follow->x, y = follow->y, z = follow->z;
+    } else if (c.subject.kind == SUBJECT_PART && level && c.subject.index >= 0 && c.subject.index < level->part_count) {
+        const part *q = &level->parts[c.subject.index];
+        x = q->x, y = q->y + q->sy / 2, z = q->z;
+    }
+
+    /* In third person the orbit buttons move the camera around the subject (right moves it
+     * right, so the view turns left; up raises it, looking down more); in first person they
+     * turn the view itself, so both are the other way round. */
+    int right = c.mode == CAM_FIRST ? -ORBIT_SPEED : ORBIT_SPEED, up = right;
+    /* The orbit buttons push the look stick all the way; the stick's direction counts in
+     * full, its length only up to LOOK_FULL (a round gate: no faster on a diagonal). */
+    int lx = in.look_x + (!!(buttons & CAM_RIGHT) - !!(buttons & CAM_LEFT)) * LOOK_FULL;
+    int ly = in.look_y + (!!(buttons & CAM_DOWN) - !!(buttons & CAM_UP)) * LOOK_FULL;
+    lx = clamp(lx, -4 * LOOK_FULL, 4 * LOOK_FULL), ly = clamp(ly, -4 * LOOK_FULL, 4 * LOOK_FULL);
+    int len = (int)isqrt(lx * lx + ly * ly);
+    if (len > LOOK_FULL) {
+        lx = lx * LOOK_FULL / len;
+        ly = ly * LOOK_FULL / len;
+    }
+    c.target.yaw += right * lx / LOOK_FULL;
+    c.target.pitch -= up * ly / LOOK_FULL;
+
+    if (c.mode == CAM_FIRST) {
+        c.target.x = x;
+        c.target.y = y + CAM_EYE;
+        c.target.z = z;
+        c.target.dist = 0;
+        c.target.pitch = clamp(c.target.pitch, -CAM_LOOK_MAX, CAM_LOOK_MAX);
+        c.ground = y;
+        c.walked = 0;
+    } else {
+        /* Follow the ground a player stands on fully, but only half of a jump, so they stay
+         * in frame and you still see the height. Dropping below it (walking off) counts too. */
+        if (!follow || follow->on_ground || y < c.ground)
+            c.ground = y;
+        c.target.x = x;
+        c.target.y = c.ground + (y - c.ground) / 2 + CAM_FOCUS;
+        c.target.z = z;
+    }
+    if (c.mode == CAM_THIRD) {
+        if (buttons & CAM_IN)  c.zoom -= ZOOM_SPEED;
+        if (buttons & CAM_OUT) c.zoom += ZOOM_SPEED;
+        c.zoom = clamp(c.zoom, CAM_DIST_MIN, CAM_DIST_MAX);
+        c.target.dist = c.zoom;
+        c.target.pitch = clamp(c.target.pitch, CAM_PITCH_MIN, CAM_PITCH_MAX);
+
+        /* A player walking one way (moving, and facing within a few degrees of last tick,
+         * which allows for the camera's own turning) for a while swings the camera behind
+         * them, unless they're walking toward it or you're orbiting. */
+        if (follow) {
+            int moved = x != c.last_x || z != c.last_z;
+            int steady = abs(wrap3600(follow->target_heading - c.last_heading + 1800) - 1800) < 50;
+            c.walked = moved && steady && !lx ? c.walked + 1 : 0;
+            c.last_heading = follow->target_heading;
+            int behind = wrap3600(follow->target_heading - c.target.yaw + 1800) - 1800;
+            if (c.walked > BEHIND_DELAY && abs(behind) < 1350)
+                c.target.yaw += clamp(behind, -BEHIND_SPEED, BEHIND_SPEED);
+        }
+    }
+    c.last_x = x;
+    c.last_z = z;
 
     c.now.x = ease(c.now.x, c.target.x, EASE);
     c.now.y = ease(c.now.y, c.target.y, EASE);
@@ -298,5 +393,22 @@ camera camera_update(camera c, unsigned buttons, const player *follow)
     c.now.yaw = ease(c.now.yaw, c.target.yaw, EASE);
     c.now.pitch = ease(c.now.pitch, c.target.pitch, EASE);
     c.now.dist = ease(c.now.dist, c.target.dist, EASE);
+    if (c.mode == CAM_FIRST) { /* the eyes don't lag behind the head; the distance eases in */
+        c.now.x = c.target.x;
+        c.now.y = c.target.y;
+        c.now.z = c.target.z;
+    }
+    if (c.mode == CAM_FIXED) {
+        /* Stand exactly at the anchor, aimed at the (eased) look point: work the view's angles
+         * and distance out from the two, keeping yaw continuous so easing out of this mode
+         * doesn't spin the long way round. */
+        int dx = c.anchor[0] - c.now.x, dy = c.anchor[1] - c.now.y, dz = c.anchor[2] - c.now.z;
+        int across = (int)isqrt((long long)dx * dx + (long long)dz * dz);
+        c.now.yaw += wrap3600(iatan2(dx, dz) - c.now.yaw + 1800) - 1800;
+        c.now.pitch = iatan2(dy, across);
+        c.now.dist = (int)isqrt((long long)across * across + (long long)dy * dy);
+        c.target.yaw = c.now.yaw;
+        c.walked = 0;
+    }
     return c;
 }

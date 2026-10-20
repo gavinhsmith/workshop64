@@ -367,7 +367,7 @@ static void run_file(lua_State *L, loader *ld, const char *path)
 
 static const char *const part_keys[] = {"name", "pos", "size", "color", "model", NULL};
 static const char *const group_keys[] = {"name", "pos", NULL};
-static const char *const no_keys[] = {NULL};
+static const char *const scene_keys[] = {"camera", NULL};
 
 static void read_children(lua_State *L, loader *ld, int t, const int origin[3], int depth);
 
@@ -468,7 +468,8 @@ static int read_logic(lua_State *L)
     snprintf(scene, sizeof scene, "scenes/%s.lua", start);
     run_file(L, ld, scene);
     int s = lua_gettop(L);
-    check_keys(L, ld, s, no_keys, 1); /* no settings yet: only the list of nodes */
+    check_keys(L, ld, s, scene_keys, 1); /* settings, then the list of nodes */
+    ld->pl->has_camera = get_triple(L, ld, s, "camera", ld->pl->camera, 0);
     static const int origin[3] = {0, 0, 0};
     read_children(L, ld, s, origin, 0);
     return 0;

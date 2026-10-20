@@ -160,8 +160,9 @@ static void draw_mesh(const mesh *m, Mtx mv)
 }
 
 /* Pass 1: the 3D scene into the top-left scene_w x 240 of the EFB. */
-static void draw_scene(const world *w, const view *v)
+static void draw_scene(const world *w, const camera *cam)
 {
+    const view *v = &cam->now;
     GX_SetViewport(0, 0, scene_w, SCREEN_H, 0, 1);
     GX_SetScissor(0, 0, scene_w, SCREEN_H);
     Mtx44 proj;
@@ -200,6 +201,8 @@ static void draw_scene(const world *w, const view *v)
     /* player = translate(x, FLOOR_Y + y + lift, z) rotY(heading); each part then
      * translate(joint) rotX(swing) */
     for (int i = 0; i < w->player_count; i++) {
+        if (camera_hides(cam, i))
+            continue;
         const player *p = &w->players[i];
         pose pz = player_pose(p);
         guMtxRotDeg(ry, 'y', p->heading / 10.0f);
@@ -268,10 +271,23 @@ static void on_wiimote_power(s32 chan) { (void)chan; power_pressed = 1; }
 #endif
 
 #define STICK_DEADZONE 32
+#define CSTICK_FULL 80 /* C-stick reading pushed all the way (it rarely reaches its gate's 127) */
 
-/* GC pad: stick moves, A jumps, C-stick or D-pad orbits, L/R zoom in/out.
- * Wii Remote: D-pad moves, A jumps, B + D-pad orbits, -/+ zoom. START / HOME sets *quit. */
-static unsigned read_input(int *quit)
+/* A C-stick axis as part of a look stick: nothing inside the dead zone, then up to LOOK_FULL. */
+static int cstick(int v)
+{
+    int a = v < 0 ? -v : v;
+    if (a <= STICK_DEADZONE)
+        return 0;
+    a = (a - STICK_DEADZONE) * LOOK_FULL / (CSTICK_FULL - STICK_DEADZONE);
+    a = a > LOOK_FULL ? LOOK_FULL : a;
+    return v < 0 ? -a : a;
+}
+
+/* GC pad: stick moves, A jumps, B runs, C-stick or D-pad orbits, L/R zoom in/out, Z switches
+ * the camera. Wii Remote: D-pad moves, A jumps, 1 runs, B + D-pad orbits, -/+ zoom, 2 switches
+ * the camera. START / HOME sets *quit. */
+static unsigned read_input(int *quit, int *look_x, int *look_y)
 {
     PAD_ScanPads();
     u16 b = PAD_ButtonsHeld(0);
@@ -281,12 +297,15 @@ static unsigned read_input(int *quit)
     if (x > STICK_DEADZONE)  in |= MOVE_RIGHT;
     if (y > STICK_DEADZONE)  in |= MOVE_FWD;
     if (y < -STICK_DEADZONE) in |= MOVE_BACK;
-    if ((b & PAD_BUTTON_LEFT) || cx < -STICK_DEADZONE)  in |= CAM_LEFT;
-    if ((b & PAD_BUTTON_RIGHT) || cx > STICK_DEADZONE)  in |= CAM_RIGHT;
-    if ((b & PAD_BUTTON_UP) || cy > STICK_DEADZONE)     in |= CAM_UP;
-    if ((b & PAD_BUTTON_DOWN) || cy < -STICK_DEADZONE)  in |= CAM_DOWN;
+    if (b & PAD_BUTTON_LEFT)  in |= CAM_LEFT;
+    if (b & PAD_BUTTON_RIGHT) in |= CAM_RIGHT;
+    if (b & PAD_BUTTON_UP)    in |= CAM_UP;
+    if (b & PAD_BUTTON_DOWN)  in |= CAM_DOWN;
+    *look_x = cstick(cx);
+    *look_y = -cstick(cy); /* up on the stick is up */
     if (b & PAD_TRIGGER_L) in |= CAM_IN;
     if (b & PAD_TRIGGER_R) in |= CAM_OUT;
+    if (b & PAD_TRIGGER_Z) in |= CAM_MODE;
     if (b & PAD_BUTTON_A)  in |= JUMP;
     if (b & PAD_BUTTON_B)  in |= RUN;
     *quit = (PAD_ButtonsDown(0) & PAD_BUTTON_START) != 0;
@@ -300,6 +319,7 @@ static unsigned read_input(int *quit)
     if (w & WPAD_BUTTON_DOWN)  in |= orbit ? CAM_DOWN : MOVE_BACK;
     if (w & WPAD_BUTTON_MINUS) in |= CAM_IN;
     if (w & WPAD_BUTTON_PLUS)  in |= CAM_OUT;
+    if (w & WPAD_BUTTON_2)     in |= CAM_MODE;
     if (w & WPAD_BUTTON_A)     in |= JUMP;
     if (w & WPAD_BUTTON_1)     in |= RUN;
     if ((WPAD_ButtonsDown(0) & WPAD_BUTTON_HOME) || power_pressed)
@@ -326,7 +346,7 @@ int main(void)
     camera cam = camera_init();
     ticker tk = {0};
     while (!quit) {
-        draw_scene(&w, &cam.now);
+        draw_scene(&w, &cam);
         draw_upscaled();
 
         GX_DrawDone();
@@ -337,11 +357,12 @@ int main(void)
         VIDEO_SetNextFramebuffer(xfb[fb]);
         VIDEO_Flush();
         VIDEO_WaitVSync();
-        unsigned b = read_input(&quit);
+        int look_x, look_y;
+        unsigned b = read_input(&quit, &look_x, &look_y);
         for (int n = ticker_due(&tk, ticks_to_microsecs(gettime())); n > 0; n--) {
-            input in[MAX_PLAYERS] = {{b, cam.now.yaw}};
+            input in[MAX_PLAYERS] = {{b, cam.now.yaw, look_x, look_y}};
             w = world_update(w, in);
-            cam = camera_update(cam, b, &w.players[0]);
+            cam = camera_update(cam, in[0], &w);
         }
     }
 #ifdef HW_RVL

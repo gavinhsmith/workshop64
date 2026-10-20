@@ -10,16 +10,16 @@ static place pl;
 /* Run `ticks` ticks with player 0 holding `buttons`, looking along `yaw`. */
 static world run(world w, unsigned buttons, int yaw, int ticks)
 {
-    input in[MAX_PLAYERS] = {{buttons, yaw}};
+    input in[MAX_PLAYERS] = {{buttons, yaw, 0, 0}};
     while (ticks--)
         w = world_update(w, in);
     return w;
 }
 
-static camera follow(camera c, unsigned buttons, const player *p, int ticks)
+static camera follow(camera c, unsigned buttons, const world *w, int ticks)
 {
     while (ticks--)
-        c = camera_update(c, buttons, p);
+        c = camera_update(c, (input){buttons, 0, 0, 0}, w);
     return c;
 }
 
@@ -129,6 +129,7 @@ static void test_experience_loader(void)
     assert(pl.part_count == 11 && pl.mesh_count == 2 && pl.texture_count == 1);
     assert(pl.parts[1].y == 300 && pl.parts[1].sy == 600 && pl.parts[1].mesh == -1);
     assert(pl.parts[4].y == 1650); /* 1.65 units */
+    assert(pl.has_camera && pl.camera[0] == 9000 && pl.camera[1] == 6000 && pl.camera[2] == 9000);
     assert(pl.parts[7].mesh == 1 && pl.parts[7].color[0] == 230 && pl.parts[8].mesh == 0);
     /* The crates are a group at x 3.1; its parts are placed relative to it. */
     assert(pl.parts[8].x == 2500 && pl.parts[9].x == 3700 && pl.parts[10].x == 3100 && pl.parts[10].y == 1500);
@@ -204,6 +205,7 @@ static void test_experience_loader(void)
     assert(try_scene("return {{pos = {40, 0, 0}, {pos = {20, 0, 0}, size = {1, 1, 1}}}}", "outside the world") == PLACE_BAD_DATA);
     assert(try_scene("return {{pos = {0, 0, 0}, size = {1, 1, 1}, {pos = {0, 0, 0}, size = {1, 1, 1}}}}", "unexpected key") == PLACE_BAD_DATA);
     assert(try_scene("return {sky = {0, 0, 0}}", "unknown field 'sky'") == PLACE_BAD_DATA);
+    assert(try_scene("return {camera = {0, 1}}", "'camera'") == PLACE_BAD_DATA);
     assert(try_scene("return {{pos = {0, 0, 0}, size = {1, 1, 1}}, 'x'}", "entry 2 should be a table") == PLACE_BAD_DATA);
     assert(try_scene("local t = {} t[1] = t return {t}", "nested too deeply") == PLACE_BAD_DATA);
     char deep[1000] = "return ";
@@ -449,7 +451,7 @@ int main(void)
 
     /* Players move independently from their own inputs. */
     world two = world_init(&pl, 2);
-    input in[MAX_PLAYERS] = {{MOVE_RIGHT, 0}, {MOVE_FWD, 0}};
+    input in[MAX_PLAYERS] = {{MOVE_RIGHT, 0, 0, 0}, {MOVE_FWD, 0, 0, 0}};
     for (int i = 0; i < 10; i++)
         two = world_update(two, in);
     assert(two.players[0].x == 1200 && two.players[0].z == 0);
@@ -467,13 +469,13 @@ int main(void)
     assert(run(turn, 0, 0, 100).players[0].heading == 3500);
 
     /* The camera follows with a lag, then settles exactly; orbit/zoom ease and clamp. */
-    camera c = follow(camera_init(), 0, &f.players[0], 1);
+    camera c = follow(camera_init(), 0, &f, 1);
     assert(c.now.z > f.players[0].z && c.now.z < 0);
-    c = follow(c, 0, &f.players[0], 200);
+    c = follow(c, 0, &f, 200);
     assert(c.now.z == f.players[0].z && c.now.x == f.players[0].x);
-    camera o = follow(camera_init(), CAM_RIGHT, p0, 1);
-    assert(o.target.yaw == 40 && o.now.yaw > 0 && o.now.yaw < 40);
-    o = follow(o, CAM_UP | CAM_IN, p0, 300);
+    camera o = follow(camera_init(), CAM_RIGHT, &w, 1);
+    assert(o.target.yaw == 70 && o.now.yaw > 0 && o.now.yaw < 70);
+    o = follow(o, CAM_UP | CAM_IN, &w, 300);
     assert(o.now.pitch == CAM_PITCH_MAX && o.now.dist == CAM_DIST_MIN);
 
     /* Running is faster than walking. */
@@ -499,9 +501,9 @@ int main(void)
     world walk = w;
     camera s = camera_init();
     for (int i = 0; i < 300; i++) {
-        input in[MAX_PLAYERS] = {{MOVE_RIGHT, s.now.yaw}};
+        input in[MAX_PLAYERS] = {{MOVE_RIGHT, s.now.yaw, 0, 0}};
         walk = world_update(walk, in);
-        s = camera_update(s, 0, &walk.players[0]);
+        s = camera_update(s, (input){0, 0, 0, 0}, &walk);
         if (i == 20)
             assert(s.target.yaw == 0);
         if (i == 30)
@@ -512,17 +514,104 @@ int main(void)
     camera t = camera_init();
     for (int i = 0; i < 200; i++) {
         toward = run(toward, MOVE_BACK, 0, 1);
-        t = camera_update(t, 0, &toward.players[0]);
+        t = camera_update(t, (input){0, 0, 0, 0}, &toward);
     }
     assert(t.target.yaw == 0);
 
     /* Standing on a part, the camera settles at its height; a jump from there only
      * raises the camera by half the jump. */
-    camera onstep = follow(camera_init(), 0, &drop.players[0], 300);
+    camera onstep = follow(camera_init(), 0, &drop, 300);
     assert(onstep.now.y == 600 + CAM_FOCUS);
     world hop = run(drop, JUMP, 0, 10);
-    onstep = camera_update(onstep, 0, &hop.players[0]);
+    onstep = camera_update(onstep, (input){0, 0, 0, 0}, &hop);
     assert(onstep.target.y == 600 + (hop.players[0].y - 600) / 2 + CAM_FOCUS);
+
+    /* Camera modes. A press of CAM_MODE (once per press, not while held) switches to first
+     * person: the distance eases to 0, the view sits at the eyes, and the player is hidden
+     * only once the camera is close. Pressing again eases back out. */
+    camera cm = follow(camera_init(), 0, &w, 50);
+    assert(cm.mode == CAM_THIRD && !camera_hides(&cm, 0));
+    cm = camera_update(cm, (input){CAM_MODE, 0, 0, 0}, &w);
+    assert(cm.mode == CAM_FIRST && !camera_hides(&cm, 0)); /* still easing in */
+    cm = follow(cm, CAM_MODE, &w, 10);
+    assert(cm.mode == CAM_FIRST);
+    cm = follow(cm, 0, &w, 60);
+    assert(cm.now.dist == 0 && cm.now.y == w.players[0].y + CAM_EYE && camera_hides(&cm, 0) && !camera_hides(&cm, 1));
+    cm = follow(cm, CAM_UP, &w, 100); /* up looks up; further up and down than third person */
+    assert(cm.target.pitch == -CAM_LOOK_MAX);
+    cm = follow(cm, CAM_DOWN, &w, 100);
+    assert(cm.target.pitch == CAM_LOOK_MAX);
+    camera turned = follow(follow(cm, CAM_RIGHT, &w, 13), 0, &w, 40); /* right turns the view right: about 90 degrees */
+    world went = run(w, MOVE_FWD, turned.now.yaw, 10);
+    assert(turned.target.yaw < cm.target.yaw && went.players[0].x > 1000 && abs(went.players[0].z) < 100);
+    world ahead = run(w, MOVE_FWD, 0, 5);
+    cm = camera_update(cm, (input){0, 0, 0, 0}, &ahead);
+    assert(cm.now.z == ahead.players[0].z); /* the eyes don't lag */
+    cm = camera_update(cm, (input){CAM_MODE, 0, 0, 0}, &ahead); /* on to the course's fixed camera */
+    cm = camera_update(cm, (input){0, 0, 0, 0}, &ahead);
+    cm = camera_update(cm, (input){CAM_MODE, 0, 0, 0}, &ahead);
+    assert(cm.mode == CAM_THIRD);
+    cm = follow(cm, 0, &ahead, 100);
+    assert(cm.now.dist == CAM_DIST && !camera_hides(&cm, 0));
+
+    /* Analog look: a stick or mouse pushed part way turns the camera part way; all the way, or
+     * further, is full speed, the same as an orbit button, and never more, even on a diagonal
+     * or with a button held too. */
+    int lx, ly;
+    look_from_motion(MOUSE_FULL / 2, 0, &lx, &ly);
+    assert(lx == LOOK_FULL / 2 && ly == 0);
+    camera half = camera_update(camera_init(), (input){0, 0, lx, ly}, &w);
+    camera full = camera_update(camera_init(), (input){CAM_RIGHT, 0, 0, 0}, &w);
+    look_from_motion(MOUSE_FULL * 50, 0, &lx, &ly);
+    camera fling = camera_update(camera_init(), (input){0, 0, lx, ly}, &w);
+    camera both = camera_update(camera_init(), (input){CAM_RIGHT, 0, LOOK_FULL, 0}, &w);
+    assert(half.target.yaw == full.target.yaw / 2 && fling.target.yaw == full.target.yaw && both.target.yaw == full.target.yaw);
+    look_from_motion(MOUSE_FULL * 10, MOUSE_FULL * 10, &lx, &ly);
+    camera diag = camera_update(camera_init(), (input){0, 0, lx, ly}, &w);
+    int dyaw = diag.target.yaw, dpitch = camera_init().target.pitch - diag.target.pitch;
+    assert(dyaw > 0 && dpitch > 0 && dyaw * dyaw + dpitch * dpitch <= full.target.yaw * full.target.yaw + 2);
+
+    /* Integer angles: straight up the x axis is 0, the y axis 90 degrees, behind 180. */
+    assert(iatan2(0, 1000) == 0 && iatan2(1000, 0) == 900 && iatan2(0, -1000) == 1800 && iatan2(-1000, 0) == -900);
+    assert(abs(iatan2(1000, 1000) - 450) <= 1 && abs(iatan2(500, 1000) - 266) <= 2 && abs(iatan2(-577, -1000) + 1500) <= 2);
+    assert(isqrt(0) == 0 && isqrt(16) == 4 && isqrt(17) == 4 && isqrt(10000000000LL) == 100000);
+
+    /* The fixed camera: CAM_MODE goes third, first, fixed (the course has one), third. It
+     * stands at the scene's camera spot and turns to follow the player as they move. */
+    camera fx = camera_init();
+    fx = camera_update(fx, (input){CAM_MODE, 0, 0, 0}, &w);
+    fx = camera_update(fx, (input){0, 0, 0, 0}, &w);
+    fx = camera_update(fx, (input){CAM_MODE, 0, 0, 0}, &w);
+    assert(fx.mode == CAM_FIXED);
+    world roam = w;
+    for (int i = 0; i < 60; i++) {
+        roam = run(roam, i < 30 ? MOVE_LEFT : MOVE_FWD, fx.now.yaw, 1);
+        fx = camera_update(fx, (input){0, 0, 0, 0}, &roam);
+        /* Where the view puts the camera: the look point, back along its angles (rounded to
+         * whole degrees here, so within half a degree at this distance). */
+        int yaw = (fx.now.yaw + 5) / 10, pitch = (fx.now.pitch + 5) / 10;
+        int across = fx.now.dist * icos(pitch) / 4096;
+        int cx = fx.now.x + across * isin(yaw) / 4096;
+        int cy = fx.now.y + fx.now.dist * isin(pitch) / 4096;
+        int cz = fx.now.z + across * icos(yaw) / 4096;
+        assert(abs(cx - 9000) < 200 && abs(cy - 5000) < 200 && abs(cz - 9000) < 200);
+    }
+    assert(fx.now.x == roam.players[0].x || abs(fx.now.x - roam.players[0].x) < 400); /* looking at them */
+    fx = camera_update(fx, (input){CAM_MODE, 0, 0, 0}, &roam);
+    assert(fx.mode == CAM_THIRD);
+
+    /* Detached on a fixed point, or attached to a part (riding on its top), in either mode. */
+    camera cd = camera_init();
+    cd.subject = (subject){SUBJECT_POINT, 0, 5000, 2000, -3000};
+    cd = follow(cd, 0, &w, 200);
+    assert(cd.now.x == 5000 && cd.now.z == -3000 && cd.now.y == 2000 + CAM_FOCUS);
+    cd.mode = CAM_FIRST;
+    cd = follow(cd, 0, &w, 100);
+    assert(cd.now.y == 2000 + CAM_EYE && cd.now.dist == 0 && !camera_hides(&cd, 0));
+    camera ca = camera_init();
+    ca.subject = (subject){SUBJECT_PART, 4, 0, 0, 0}; /* the ledge */
+    ca = follow(ca, 0, &w, 200);
+    assert(ca.now.x == pl.parts[4].x && ca.now.y == pl.parts[4].y + pl.parts[4].sy / 2 + CAM_FOCUS);
 
     test_avatar(&w);
 

@@ -1,5 +1,7 @@
 -- The prototype's obstacle course. y is a part's centre height above the floor.
 return {
+    camera = {9, 6, 9}, -- the fixed camera: high in a corner, looking over the course
+
     {name = "wall", pos = {-4, 1, 0}, size = {1, 2, 6}, color = {110, 120, 140}},
     {name = "steps",
         {pos = {0, 0.3, -4}, size = {2, 0.6, 2}, color = {196, 40, 28}},

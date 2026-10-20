@@ -133,7 +133,7 @@ static uint64_t now_us(void)
     return t / SYSCLOCK_ARM11 * 1000000 + t % SYSCLOCK_ARM11 * 1000000 / SYSCLOCK_ARM11;
 }
 
-/* Circle pad moves, A jumps, B runs, D-pad orbits, L/R zoom in/out. */
+/* Circle pad moves, A jumps, B runs, D-pad orbits, L/R zoom in/out, X switches the camera. */
 static unsigned read_input(u32 keys)
 {
     unsigned in = 0;
@@ -147,6 +147,7 @@ static unsigned read_input(u32 keys)
     if (keys & KEY_DDOWN)      in |= CAM_DOWN;
     if (keys & KEY_L)          in |= CAM_IN;
     if (keys & KEY_R)          in |= CAM_OUT;
+    if (keys & KEY_X)          in |= CAM_MODE;
     if (keys & KEY_A)          in |= JUMP;
     if (keys & KEY_B)          in |= RUN;
     return in;
@@ -156,7 +157,7 @@ int main(void)
 {
     gfxInitDefault();
     consoleInit(GFX_BOTTOM, NULL);
-    printf("hangout64\n\nCircle pad: move\nA:          jump\nB:          run\nD-pad:      orbit\nL/R:        zoom\nSTART:      exit\n");
+    printf("hangout64\n\nCircle pad: move\nA:          jump\nB:          run\nD-pad:      orbit\nL/R:        zoom\nX:          camera\nSTART:      exit\n");
 
     C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
     /* The top screen is physically rotated: its framebuffer is 240 wide, 400 tall. */
@@ -203,9 +204,9 @@ int main(void)
             break;
         unsigned b = read_input(hidKeysHeld());
         for (int n = ticker_due(&tk, now_us()); n > 0; n--) {
-            input in[MAX_PLAYERS] = {{b, cam.now.yaw}};
+            input in[MAX_PLAYERS] = {{b, cam.now.yaw, 0, 0}};
             w = world_update(w, in);
-            cam = camera_update(cam, b, &w.players[0]);
+            cam = camera_update(cam, in[0], &w);
         }
 
         /* view = translate(0, 0, -dist) rotX(pitch) rotY(-yaw) translate(-x, -y, -z) */
@@ -232,6 +233,8 @@ int main(void)
         C3D_DepthTest(true, GPU_GREATER, GPU_WRITE_ALL);
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, u_proj, &proj);
         for (int i = 0; i < w.player_count; i++) {
+            if (camera_hides(&cam, i))
+                continue;
             const player *p = &w.players[i];
             C3D_Mtx m;
             Mtx_Copy(&m, &view);
