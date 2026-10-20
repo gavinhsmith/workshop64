@@ -113,7 +113,7 @@ int main(void)
     glEnable(GL_DEPTH_TEST);
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
 
-    assertf(place_load(&pl, default_place, default_place_size) == PLACE_OK, "built-in place failed to load");
+    assertf(experience_load(&pl, builtin_experience, builtin_experience_size) == PLACE_OK, "built-in experience: %s", experience_error);
     world w = world_init(&pl, 1);
     upload_textures();
     camera cam = camera_init();

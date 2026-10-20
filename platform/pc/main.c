@@ -181,8 +181,8 @@ int main(int argc, char **argv)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    if (place_load(&pl, default_place, default_place_size) != PLACE_OK) {
-        SDL_Log("built-in place failed to load");
+    if (experience_load(&pl, builtin_experience, builtin_experience_size) != PLACE_OK) {
+        SDL_Log("built-in experience: %s", experience_error);
         return 1;
     }
     world w = world_init(&pl, 1);

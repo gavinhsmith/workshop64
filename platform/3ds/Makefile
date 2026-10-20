@@ -9,7 +9,7 @@ TARGET  := hangout64
 BUILD   := build
 OBJS    := $(BUILD)/vshader.shbin.o $(BUILD)/main.o $(addprefix $(BUILD)/,$(CORE_OBJ))
 ARCH    := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
-CFLAGS  := -O2 -Wall $(ARCH) -D__3DS__ -I$(CTRULIB)/include -I$(CORE) -MMD -MP -I$(BUILD)
+CFLAGS  := -O2 -Wall $(ARCH) -D__3DS__ -I$(CTRULIB)/include $(CORE_INC) -MMD -MP -I$(BUILD)
 LDFLAGS := -specs=3dsx.specs $(ARCH)
 LIBS    := -L$(CTRULIB)/lib -lcitro3d -lctru -lm
 
@@ -34,10 +34,10 @@ $(BUILD)/main.o: $(BUILD)/vshader.shbin.o
 $(BUILD)/%.o: %.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/%.o: $(CORE)/%.c | $(BUILD)
+$(BUILD)/%.o: $(CORE)/%.c $(CORE_HDR) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/%.o: $(GEN)/%.c | $(BUILD)
+$(BUILD)/%.o: $(GEN)/%.c $(CORE_HDR) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD):

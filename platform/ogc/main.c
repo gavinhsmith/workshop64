@@ -312,7 +312,7 @@ int main(void)
 #endif
 
     int fb = 0, quit = 0;
-    if (place_load(&pl, default_place, default_place_size) != PLACE_OK)
+    if (experience_load(&pl, builtin_experience, builtin_experience_size) != PLACE_OK)
         exit(1);
     world w = world_init(&pl, 1);
     upload_textures();

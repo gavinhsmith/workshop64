@@ -2,14 +2,14 @@ BUILD_DIR = build
 include $(N64_INST)/include/n64.mk
 
 include ../../core/core.mk
-CFLAGS += -I$(CORE) -MP  # -MP: a removed header must not break old .d files
+CFLAGS += $(CORE_INC) -MP  # -MP: a removed header must not break old .d files
 
 all: hangout64.z64
 
-$(BUILD_DIR)/core/%.o: $(CORE)/%.c
+$(BUILD_DIR)/core/%.o: $(CORE)/%.c $(CORE_HDR)
 	@mkdir -p $(dir $@)
 	$(N64_CC) -c $(CFLAGS) -o $@ $<
-$(BUILD_DIR)/core/%.o: $(GEN)/%.c
+$(BUILD_DIR)/core/%.o: $(GEN)/%.c $(CORE_HDR)
 	@mkdir -p $(dir $@)
 	$(N64_CC) -c $(CFLAGS) -o $@ $<
 

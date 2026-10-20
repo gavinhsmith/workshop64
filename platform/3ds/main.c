@@ -167,8 +167,8 @@ int main(void)
     AttrInfo_AddLoader(attr, 1, GPU_FLOAT, 3);
     AttrInfo_AddLoader(attr, 2, GPU_FLOAT, 2);
 
-    if (place_load(&pl, default_place, default_place_size) != PLACE_OK) {
-        printf("built-in place failed to load\n");
+    if (experience_load(&pl, builtin_experience, builtin_experience_size) != PLACE_OK) {
+        printf("built-in experience: %s\n", experience_error);
         return 1;
     }
     world w = world_init(&pl, 1);

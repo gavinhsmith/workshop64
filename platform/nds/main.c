@@ -115,8 +115,8 @@ int main(void)
     gluPerspective(53, 256.0 / 192.0, 0.2, 100);
     glPolyFmt(POLY_ALPHA(31) | POLY_CULL_NONE);
 
-    if (place_load(&pl, default_place, default_place_size) != PLACE_OK) {
-        printf("built-in place failed to load\n");
+    if (experience_load(&pl, builtin_experience, builtin_experience_size) != PLACE_OK) {
+        printf("built-in experience: %s\n", experience_error);
         return 1;
     }
     world w = world_init(&pl, 1);

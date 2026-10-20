@@ -11,8 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - run: make test
-      # Place files will come from the network: run the loader tests under sanitizers too.
+      # Experiences will come from the network: run the loader tests under sanitizers too.
       - run: make -C core test CC="gcc -g -fsanitize=address,undefined -fno-sanitize-recover=all"
 
   console:
@@ -30,6 +32,8 @@ jobs:
     container: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - run: make -C platform/${{ matrix.platform }}
       - uses: actions/upload-artifact@v4
         with:
@@ -49,6 +53,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       # Static SDL3 so the binary runs without SDL installed.
       - uses: libsdl-org/setup-sdl@main
         with:

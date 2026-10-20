@@ -23,48 +23,124 @@ static camera follow(camera c, unsigned buttons, const player *p, int ticks)
     return c;
 }
 
-/* Little-endian writers and a chunk finder for hand-made and corrupted place files. */
+/* Little-endian writers, and a .wb64 builder for hand-made and broken experiences. */
 static void wr16(uint8_t *p, unsigned v) { p[0] = v & 0xff; p[1] = v >> 8; }
 static void wr32(uint8_t *p, uint32_t v) { wr16(p, v & 0xffff); wr16(p + 2, v >> 16); }
 
-static size_t find_chunk(const uint8_t *d, size_t size, const char *tag)
+typedef struct {
+    unsigned kind; /* 1 logic, 2 texture, 3 model */
+    const char *name;
+    const void *data;
+    size_t size;
+} test_entry;
+
+static uint8_t *build(const test_entry *e, int n, size_t *size)
 {
-    for (size_t off = 6; off + 8 <= size;) {
-        uint32_t len = d[off + 4] | d[off + 5] << 8 | d[off + 6] << 16 | (uint32_t)d[off + 7] << 24;
-        if (memcmp(d + off, tag, 4) == 0)
-            return off + 8;
-        off += 8 + len;
+    size_t off = 8, total;
+    for (int i = 0; i < n; i++)
+        off += 12 + strlen(e[i].name);
+    total = off;
+    for (int i = 0; i < n; i++)
+        total += e[i].size;
+    uint8_t *b = malloc(total), *p = b + 8;
+    memcpy(b, "WB64", 4);
+    wr16(b + 4, WB64_VERSION);
+    wr16(b + 6, n);
+    for (int i = 0; i < n; i++) {
+        size_t len = strlen(e[i].name);
+        p[0] = e[i].kind, p[1] = 0;
+        wr16(p + 2, len);
+        wr32(p + 4, off);
+        wr32(p + 8, e[i].size);
+        memcpy(p + 12, e[i].name, len);
+        memcpy(b + off, e[i].data, e[i].size);
+        off += e[i].size;
+        p += 12 + len;
     }
-    return 0;
+    *size = total;
+    return b;
 }
 
-static uint8_t *copy_default(size_t extra)
+/* A blob of the built-in experience, by kind and name. */
+static const uint8_t *builtin(unsigned kind, const char *name, size_t *size)
 {
-    uint8_t *b = malloc(default_place_size + extra);
-    memcpy(b, default_place, default_place_size);
-    return b;
+    const uint8_t *d = builtin_experience, *p = d + 8;
+    for (unsigned i = 0, n = d[6] | d[7] << 8; i < n; i++) {
+        unsigned len = p[2] | p[3] << 8;
+        if (p[0] == kind && len == strlen(name) && !memcmp(p + 12, name, len)) {
+            *size = p[8] | p[9] << 8 | p[10] << 16 | (uint32_t)p[11] << 24;
+            return d + (p[4] | p[5] << 8 | p[6] << 16 | (uint32_t)p[7] << 24);
+        }
+        p += 12 + len;
+    }
+    assert(!"no such entry");
+    return NULL;
+}
+
+static const char *good_manifest = "return {id = 'test', title = 'Test', version = 1, api = 1, start = 'course'}";
+
+/* The built-in experience's assets with this manifest and scene. */
+static uint8_t *experience(const char *manifest, const char *scene, size_t *size)
+{
+    test_entry e[5] = {
+        {1, "experience.lua", manifest, strlen(manifest)},
+        {1, "scenes/course.lua", scene, strlen(scene)},
+        {2, "crate", NULL, 0}, {3, "crate", NULL, 0}, {3, "statue", NULL, 0},
+    };
+    for (int i = 2; i < 5; i++)
+        e[i].data = builtin(e[i].kind, e[i].name, &e[i].size);
+    return build(e, 5, size);
 }
 
 static int load(const uint8_t *d, size_t size)
 {
     place p;
-    int err = place_load(&p, d, size);
-    assert(err != PLACE_OK || p.part_count > 0);
-    assert(err == PLACE_OK || (p.parts == NULL && p.meshes == NULL && p.part_count == 0));
+    int err = experience_load(&p, d, size);
+    assert(err == PLACE_OK || (p.parts == NULL && p.meshes == NULL && p.part_count == 0 && experience_error[0]));
     place_free(&p);
     return err;
 }
 
-static void test_place_loader(void)
+/* Load an experience with this manifest and scene; any error must mention `says`. */
+static int try_logic(const char *manifest, const char *scene, const char *says)
 {
-    /* The default place: 11 parts; the statue (mesh 0, untextured) and three crates
-     * (mesh 1, textured with texture 0, a 16x16 crate). */
-    assert(place_load(&pl, default_place, default_place_size) == PLACE_OK);
+    size_t size;
+    uint8_t *b = experience(manifest, scene, &size);
+    int err = load(b, size);
+    free(b);
+    if (says && !strstr(experience_error, says)) {
+        printf("expected \"%s\" in: %s\n", says, experience_error);
+        assert(0);
+    }
+    return err;
+}
+
+static int try_scene(const char *scene, const char *says)
+{
+    return try_logic(good_manifest, scene, says);
+}
+
+static void test_experience_loader(void)
+{
+    /* The built-in experience: 11 parts; models in name order, so the crate (textured with
+     * texture 0, a 16x16 crate) is model 0 and the statue (untextured) model 1. */
+    assert(experience_load(&pl, builtin_experience, builtin_experience_size) == PLACE_OK);
+    assert(experience_error[0] == '\0');
     assert(pl.part_count == 11 && pl.mesh_count == 2 && pl.texture_count == 1);
     assert(pl.parts[1].y == 300 && pl.parts[1].sy == 600 && pl.parts[1].mesh == -1);
-    assert(pl.parts[7].mesh == 0 && pl.parts[7].color[0] == 230 && pl.parts[8].mesh == 1);
-    const mesh *statue = &pl.meshes[0], *crate = &pl.meshes[1];
+    assert(pl.parts[4].y == 1650); /* 1.65 units */
+    assert(pl.parts[7].mesh == 1 && pl.parts[7].color[0] == 230 && pl.parts[8].mesh == 0);
+    /* The crates are a group at x 3.1; its parts are placed relative to it. */
+    assert(pl.parts[8].x == 2500 && pl.parts[9].x == 3700 && pl.parts[10].x == 3100 && pl.parts[10].y == 1500);
+    const mesh *statue = &pl.meshes[1], *crate = &pl.meshes[0];
     assert(statue->tris == guy_mesh.tris && statue->texture == NULL && statue->uvs == NULL);
+    assert(statue->colors[0][0] <= 230 && statue->colors[0][0] > 100); /* the .mtl's gold, shaded */
+    int lo = 0, hi = 0;
+    for (int i = 0; i < statue->tris * 3; i++) {
+        lo = statue->verts[i][1] < lo ? statue->verts[i][1] : lo;
+        hi = statue->verts[i][1] > hi ? statue->verts[i][1] : hi;
+    }
+    assert(lo == 0 && abs(hi - 24 * MESH_ONE / 10) <= 1); /* kept at its size in the file */
     assert(crate->tris == 12 && crate->texture == &pl.textures[0] && crate->uvs != NULL);
     for (int i = 0; i < crate->tris * 3; i++) /* each face maps the whole texture */
         for (int a = 0; a < 2; a++)
@@ -76,70 +152,123 @@ static void test_place_loader(void)
     assert(nail[0] == 177 && nail[1] == 177 && nail[2] == 177);      /* a nail */
 
     /* Every truncation is rejected cleanly. */
-    for (size_t n = 0; n < default_place_size; n++)
-        assert(load(default_place, n) != PLACE_OK);
+    for (size_t n = 0; n < builtin_experience_size; n++)
+        assert(load(builtin_experience, n) != PLACE_OK);
 
-    uint8_t *b = copy_default(16);
+    uint8_t *b = malloc(builtin_experience_size);
+    memcpy(b, builtin_experience, builtin_experience_size);
     b[0] = 'X';
-    assert(load(b, default_place_size) == PLACE_BAD_MAGIC);
-    memcpy(b, default_place, default_place_size);
-    wr16(b + 4, PLACE_VERSION + 1);
-    assert(load(b, default_place_size) == PLACE_BAD_VERSION);
+    assert(load(b, builtin_experience_size) == PLACE_BAD_MAGIC);
+    memcpy(b, builtin_experience, builtin_experience_size);
+    wr16(b + 4, WB64_VERSION + 1);
+    assert(load(b, builtin_experience_size) == PLACE_BAD_VERSION);
 
-    /* Unknown chunks are skipped; a second PART chunk is an error. */
-    memcpy(b, default_place, default_place_size);
-    memcpy(b + default_place_size, "XTRA", 4);
-    wr32(b + default_place_size + 4, 8);
-    assert(load(b, default_place_size + 16) == PLACE_OK);
-    free(b);
-    size_t parts_at = find_chunk(default_place, default_place_size, "PART") - 8;
-    size_t parts_len = default_place_size - parts_at;
-    b = copy_default(parts_len);
-    memcpy(b + default_place_size, default_place + parts_at, parts_len);
-    assert(load(b, default_place_size + parts_len) == PLACE_BAD_CHUNK);
-    free(b);
-
-    /* Bad references and values. */
-    b = copy_default(0);
-    size_t m = find_chunk(b, default_place_size, "MESH");
-    unsigned nv = b[m] | b[m + 1] << 8;
-    wr16(b + m + 8 + nv * 10, nv); /* first triangle's first corner */
-    assert(load(b, default_place_size) == PLACE_BAD_INDEX);
-    memcpy(b, default_place, default_place_size);
-    wr16(b + m + 4, 1); /* statue mesh -> texture 1, which doesn't exist */
-    assert(load(b, default_place_size) == PLACE_BAD_INDEX);
-    memcpy(b, default_place, default_place_size);
-    b[find_chunk(b, default_place_size, "TEXR")] = 6; /* 64 px wide: over TEXTURE_MAX */
-    assert(load(b, default_place_size) == PLACE_BAD_VALUE);
-    memcpy(b, default_place, default_place_size);
-    size_t p = find_chunk(b, default_place_size, "PART");
-    wr16(b + p + 2 + 7 * 30 + 28, 2); /* statue -> mesh 2, which doesn't exist */
-    assert(load(b, default_place_size) == PLACE_BAD_INDEX);
-    memcpy(b, default_place, default_place_size);
-    wr32(b + p + 2 + 12, 0); /* part 0 with zero width */
-    assert(load(b, default_place_size) == PLACE_BAD_VALUE);
+    /* Bad references and values in assets. */
+    size_t size;
+    uint8_t *model = b + (builtin(3, "statue", &size) - builtin_experience);
+    unsigned verts = model[0] | model[1] << 8;
+    memcpy(b, builtin_experience, builtin_experience_size);
+    wr16(model + 8 + verts * 10, verts); /* first corner: past the last vertex */
+    assert(load(b, builtin_experience_size) == PLACE_BAD_INDEX);
+    memcpy(b, builtin_experience, builtin_experience_size);
+    wr16(model + 4, 1); /* statue -> texture 1, which doesn't exist */
+    assert(load(b, builtin_experience_size) == PLACE_BAD_INDEX && strstr(experience_error, "models/statue"));
+    memcpy(b, builtin_experience, builtin_experience_size);
+    b[builtin(2, "crate", &size) - builtin_experience] = 6; /* 64 px wide: over TEXTURE_MAX */
+    assert(load(b, builtin_experience_size) == PLACE_BAD_VALUE);
     free(b);
 
-    /* Over the triangle budget: 200 boxes is 2000 triangles plus the floor. */
-    size_t size = 6 + 8 + 2 + 200 * 30;
-    b = calloc(1, size);
-    memcpy(b, "HG64", 4);
-    wr16(b + 4, PLACE_VERSION);
-    memcpy(b + 6, "PART", 4);
-    wr32(b + 10, 2 + 200 * 30);
-    wr16(b + 14, 200);
-    for (int i = 0; i < 200; i++)
-        for (int k = 3; k < 6; k++)
-            wr32(b + 16 + i * 30 + 4 * k, 100), wr16(b + 16 + i * 30 + 28, 0xffff);
-    assert(load(b, size) == PLACE_OVER_BUDGET);
-    wr16(b + 14, 100), wr32(b + 10, 2 + 100 * 30); /* 100 boxes fit */
-    assert(load(b, 6 + 8 + 2 + 100 * 30) == PLACE_OK);
+    /* Entries of unknown kinds are skipped; an empty scene is fine; no manifest is an error. */
+    test_entry extra[] = {
+        {1, "experience.lua", good_manifest, strlen(good_manifest)},
+        {1, "scenes/course.lua", "return {}", 9},
+        {99, "future", "?", 1},
+    };
+    b = build(extra, 3, &size);
+    assert(load(b, size) == PLACE_OK);
     free(b);
+    b = build(extra + 1, 2, &size);
+    assert(load(b, size) == PLACE_BAD_DATA && strstr(experience_error, "experience.lua is missing"));
+    free(b);
+
+    /* Scenes: fields, values, models, and groups. */
+    assert(try_scene("return {{pos = {0, 1, 0}, size = {1, 1, 1}}, {name = 'empty group', pos = {1, 0, 0}}}", NULL) == PLACE_OK);
+    assert(try_scene("return {{pos = {0, 1, 0}, size = {1, 1, 1}, rot = 45}}", "unknown field 'rot'") == PLACE_BAD_DATA);
+    assert(try_scene("return {{name = 'g', {pos = {0, 0, 0}, size = {1, 1, 1}, model = 'nope'}}}",
+                     "scenes/course.lua/g/1: no model 'nope'") == PLACE_BAD_DATA);
+    assert(try_scene("return {{pos = {0, 0, 0}, size = {1, 1, 1}, color = function() end}}", "'color'") == PLACE_BAD_DATA);
+    assert(try_scene("return {{pos = {0, 0, 0}, size = {1, 1, 1}, color = {256, 0, 0}}}", "'color'") == PLACE_BAD_DATA);
+    assert(try_scene("return {{pos = {0, 0, 0}, size = {1, 0.0004, 1}}}", "positive") == PLACE_BAD_DATA);
+    assert(try_scene("return {{size = {1, 1, 1}}}", "needs 'pos'") == PLACE_BAD_DATA);
+    assert(try_scene("return {{pos = {60, 0, 0}, size = {1, 1, 1}}}", "'pos'") == PLACE_BAD_DATA);
+    assert(try_scene("return {{pos = {40, 0, 0}, {pos = {20, 0, 0}, size = {1, 1, 1}}}}", "outside the world") == PLACE_BAD_DATA);
+    assert(try_scene("return {{pos = {0, 0, 0}, size = {1, 1, 1}, {pos = {0, 0, 0}, size = {1, 1, 1}}}}", "unexpected key") == PLACE_BAD_DATA);
+    assert(try_scene("return {sky = {0, 0, 0}}", "unknown field 'sky'") == PLACE_BAD_DATA);
+    assert(try_scene("return {{pos = {0, 0, 0}, size = {1, 1, 1}}, 'x'}", "entry 2 should be a table") == PLACE_BAD_DATA);
+    assert(try_scene("local t = {} t[1] = t return {t}", "nested too deeply") == PLACE_BAD_DATA);
+    char deep[1000] = "return ";
+    for (int i = 0; i < 300; i++)
+        strcat(deep, "{");
+    for (int i = 0; i < 300; i++)
+        strcat(deep, "}");
+    assert(try_scene(deep, "overflow") == PLACE_BAD_DATA); /* stops early: consoles have small stacks */
+
+    /* Lua errors carry the file and line; the sandbox has nothing in it; text only. */
+    assert(try_scene("return {\n{pos = }", "scenes/course.lua:2:") == PLACE_BAD_DATA);
+    assert(try_scene("return {{pos = {math.floor(1), 0, 0}, size = {1, 1, 1}}}", "math") == PLACE_BAD_DATA);
+    assert(try_scene("return {{pos = {0, 0, 0}, size = {#os.getenv('PATH'), 1, 1}}}", "os") == PLACE_BAD_DATA);
+    assert(try_scene("\x1bLua", "binary") == PLACE_BAD_DATA);
+    assert(try_scene("while true do end", "takes too long") == PLACE_BAD_DATA);
+    assert(try_scene("local s = 'x' while true do s = s .. s end", "too much memory") == PLACE_OVER_BUDGET);
+
+    /* Lengths in units round to the nearest thousandth; groups nest and offset. */
+    b = experience(good_manifest,
+                   "return {{pos = {1, 0.5, -2.25}, {pos = {0.001, 1.65, 0}, size = {0.5, 1, 1}},"
+                   " {pos = {-1, 0, 0}, {pos = {0, 0, 0.0004}, size = {1, 1, 1}}}}}", &size);
+    place q;
+    assert(experience_load(&q, b, size) == PLACE_OK && q.part_count == 2);
+    assert(q.parts[0].x == 1001 && q.parts[0].y == 2150 && q.parts[0].z == -2250 && q.parts[0].sx == 500);
+    assert(q.parts[1].x == 0 && q.parts[1].y == 500 && q.parts[1].z == -2250);
+    assert(q.parts[0].color[0] == 163); /* default grey */
+    place_free(&q);
+    free(b);
+
+    /* Budgets: 120 boxes plus the floor is 1400 triangles, the limit; parts max out at 256. */
+    char *scene = malloc(64 * 300);
+    for (int boxes = 120; boxes <= 121; boxes++) {
+        strcpy(scene, "return {");
+        for (int i = 0; i < boxes; i++)
+            strcat(scene, "{pos = {0, 0, 0}, size = {1, 1, 1}},");
+        strcat(scene, "}");
+        assert(try_scene(scene, boxes == 120 ? NULL : "triangle budget") == (boxes == 120 ? PLACE_OK : PLACE_OVER_BUDGET));
+    }
+    strcpy(scene, "return {");
+    for (int i = 0; i < 257; i++)
+        strcat(scene, "{pos = {0, 0, 0}, size = {1, 1, 1}},");
+    strcat(scene, "}");
+    assert(try_scene(scene, "more than 256 parts") == PLACE_OVER_BUDGET);
+    free(scene);
+
+    /* The manifest. */
+    const char *box = "return {{pos = {0, 1, 0}, size = {1, 1, 1}}}";
+    assert(try_logic("return {id = 'x', title = 'X', version = 1, api = 1, start = 'course', icon = 'crate', players = 4}",
+                     box, NULL) == PLACE_OK);
+    assert(try_logic("return {id = 'x', title = 'X', version = 1, api = 2, start = 'course'}", box, "newer") == PLACE_NEEDS_UPDATE);
+    assert(try_logic("return {id = 'x', title = 'X', version = 1, api = 1}", box, "'start'") == PLACE_BAD_DATA);
+    assert(try_logic("return {id = 'x', title = 'X', version = 1, api = 1, start = 'nope'}", box,
+                     "scenes/nope.lua is missing") == PLACE_BAD_DATA);
+    assert(try_logic("return {id = 'x', title = 'X', version = 1, api = 1, start = 'course', icon = 'nope'}", box,
+                     "icon") == PLACE_BAD_DATA);
+    assert(try_logic("return {id = 'x', title = 'X', version = 1, api = 1, start = 'course', players = 5}", box,
+                     "'players'") == PLACE_BAD_DATA);
+    assert(try_logic("return {id = 'x', title = 'X', version = 1, api = 1, start = 'course', author = 'me'}", box,
+                     "unknown field 'author'") == PLACE_BAD_DATA);
+    assert(try_logic("return 5", box, "should return a table") == PLACE_BAD_DATA);
 }
 
 int main(void)
 {
-    test_place_loader();
+    test_experience_loader();
     assert(isin(0) == 0 && isin(90) == 4096 && isin(270) == -4096 && icos(0) == 4096);
     assert(abs(isin(30) - 2048) < 20 && abs(isin(-30) + 2048) < 20);
 

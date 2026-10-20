@@ -17,7 +17,7 @@ TARGET  := hangout64
 BUILD   := build
 OBJS    := $(BUILD)/main.o $(addprefix $(BUILD)/,$(CORE_OBJ))
 ARCH    := -march=armv5te -mtune=arm946e-s
-CFLAGS  := -O2 -Wall $(ARCH) -DARM9 $(_EXTRADEFS) -I$(LIBNDS)/include -I$(CORE) -MMD -MP
+CFLAGS  := -O2 -Wall $(ARCH) -DARM9 $(_EXTRADEFS) -I$(LIBNDS)/include $(CORE_INC) -MMD -MP
 # ds_rules' %.elf rule links these, adding calico's specs and runtime.
 LD       := $(CC)
 OFILES   := $(OBJS)
@@ -33,10 +33,10 @@ $(TARGET).elf: $(OBJS)
 $(BUILD)/%.o: %.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/%.o: $(CORE)/%.c | $(BUILD)
+$(BUILD)/%.o: $(CORE)/%.c $(CORE_HDR) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/%.o: $(GEN)/%.c | $(BUILD)
+$(BUILD)/%.o: $(GEN)/%.c $(CORE_HDR) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD):

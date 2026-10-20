@@ -301,8 +301,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (place_load(&pl, default_place, default_place_size) != PLACE_OK) {
-        SDL_Log("built-in place failed to load");
+    if (experience_load(&pl, builtin_experience, builtin_experience_size) != PLACE_OK) {
+        SDL_Log("built-in experience: %s", experience_error);
         return 1;
     }
     w = world_init(&pl, 1);

@@ -16,13 +16,27 @@ add_custom_command(OUTPUT ${GEN}/guy_mesh.c
     COMMAND Python3::Interpreter ${ROOT}/tools/obj2c.py ${ROOT}/assets/model/guy.obj ${GEN}/guy_mesh.c guy_mesh 255,255,255
             ${ROOT}/assets/texture/guy_base.png guy_texture ${ROOT}/assets/texture/guy_coat.png
     DEPENDS ${ROOT}/tools/obj2c.py ${TOOLS} ${ASSETS})
-add_custom_command(OUTPUT ${GEN}/default_place.c
+set(LUA ${ROOT}/third_party/lua)
+if(NOT EXISTS ${LUA}/luaconf.h)
+    message(FATAL_ERROR "third_party/lua is empty: run git submodule update --init")
+endif()
+set(EXPERIENCE ${ROOT}/experiences/course)
+file(GLOB_RECURSE EXPERIENCE_FILES ${EXPERIENCE}/*)
+add_custom_command(OUTPUT ${GEN}/builtin_experience.c
     COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN}
-    COMMAND Python3::Interpreter ${ROOT}/tools/placec.py ${ROOT}/assets/scene/course.json ${GEN}/default_place.c default_place
-    DEPENDS ${ROOT}/tools/placec.py ${TOOLS} ${ROOT}/assets/scene/course.json ${ASSETS})
+    COMMAND Python3::Interpreter ${ROOT}/tools/wb64.py ${EXPERIENCE} ${GEN}/builtin_experience.c builtin_experience
+    DEPENDS ${ROOT}/tools/wb64.py ${TOOLS} ${EXPERIENCE_FILES})
+add_custom_command(OUTPUT ${GEN}/lua32.h
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN}
+    COMMAND Python3::Interpreter ${ROOT}/tools/lua32.py ${LUA}/luaconf.h ${GEN}/lua32.h
+    DEPENDS ${ROOT}/tools/lua32.py ${LUA}/luaconf.h)
 
-add_executable(hangout64 main.c ${ROOT}/core/world.c ${ROOT}/core/place.c ${GEN}/guy_mesh.c ${GEN}/default_place.c)
-target_include_directories(hangout64 PRIVATE ${ROOT}/core)
+add_executable(hangout64 main.c ${ROOT}/core/world.c ${ROOT}/core/wb64.c ${ROOT}/core/lua.c
+    ${GEN}/guy_mesh.c ${GEN}/builtin_experience.c ${GEN}/lua32.h)
+target_include_directories(hangout64 PRIVATE ${ROOT}/core ${GEN} ${LUA})
+if(NOT WIN32)
+    target_link_libraries(hangout64 PRIVATE m)
+endif()
 target_link_libraries(hangout64 PRIVATE SDL3::SDL3 OpenGL::GL)
 # Same output dir for every generator/config, so CI knows where to look.
 set_target_properties(hangout64 PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/bin>)

@@ -4,7 +4,7 @@
 static const place *level; /* the current place, set by world_init() */
 
 #define FLOOR_TRIS (FLOOR_TILES * FLOOR_TILES * 2)
-static int16_t level_verts[PLACE_MAX_TRIS * 3][3]; /* place_load() keeps us within the budget */
+static int16_t level_verts[PLACE_MAX_TRIS * 3][3]; /* experience_load() keeps us within the budget */
 static uint8_t level_colors[PLACE_MAX_TRIS][3];
 mesh level_mesh = {.verts = level_verts, .colors = level_colors};
 

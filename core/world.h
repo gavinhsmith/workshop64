@@ -59,8 +59,8 @@ typedef struct {
     int mesh;       /* index into the place's meshes, or -1 for a plain box */
 } part;
 
-/* A place: the content of one game, loaded from bytes so it can come from the network
- * later. Format: see tools/placec.py. Everything is validated on load. */
+/* A place: the content of one scene, loaded from an experience (.wb64) so it can come from
+ * the network later. Format: see tools/wb64.py. Everything is validated on load. */
 typedef struct {
     part *parts;
     int part_count;
@@ -71,23 +71,29 @@ typedef struct {
 } place;
 
 enum {
-    PLACE_OK, PLACE_BAD_MAGIC, PLACE_BAD_VERSION, PLACE_TRUNCATED, PLACE_BAD_CHUNK,
+    PLACE_OK, PLACE_BAD_MAGIC, PLACE_BAD_VERSION, PLACE_TRUNCATED, PLACE_BAD_ENTRY,
     PLACE_BAD_INDEX, PLACE_BAD_VALUE, PLACE_OVER_BUDGET, PLACE_NO_MEMORY,
+    PLACE_BAD_DATA,     /* a logic file (Lua) failed to load or has bad fields */
+    PLACE_NEEDS_UPDATE, /* needs a newer Lua API than ENGINE_API */
 };
-#define PLACE_VERSION 2
+#define WB64_VERSION 1 /* .wb64 format version */
+#define ENGINE_API 1   /* Lua API version this engine provides (docs/engine.md section 12) */
 #define PLACE_MAX_PARTS 256
 #define PLACE_MAX_MESHES 32
 #define PLACE_MAX_TEXTURES 16
 #define PLACE_MAX_TRIS 1400 /* floor + parts; leaves the DS's 2048 room for 4 avatars */
 #define PLACE_MAX_COORD 50000 /* positions and sizes; keeps 8.8 mesh coords in range */
 
-/* Load a place from bytes. On failure returns a PLACE_* error and leaves *pl empty. */
-int place_load(place *pl, const uint8_t *data, size_t size);
+/* Load an experience (.wb64) from bytes into *pl: its models, textures and start scene.
+ * On failure returns a PLACE_* error, leaves *pl empty and says what was wrong in
+ * experience_error. */
+int experience_load(place *pl, const uint8_t *data, size_t size);
+extern char experience_error[128];
 void place_free(place *pl);
 
-/* The built-in place, generated from assets/scene/course.json. */
-extern const uint8_t default_place[];
-extern const unsigned default_place_size;
+/* The built-in experience, packed from experiences/course. */
+extern const uint8_t builtin_experience[];
+extern const unsigned builtin_experience_size;
 
 /* Held buttons for one tick. Movement is relative to the camera's view. */
 enum {

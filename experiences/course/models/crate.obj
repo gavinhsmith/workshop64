@@ -1,4 +1,6 @@
 # Crate: unit cube, Z-up, every face mapped to the whole texture
+mtllib crate.mtl
+usemtl crate
 v 0 0 0
 v 1 0 0
 v 0 1 0

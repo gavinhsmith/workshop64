@@ -67,6 +67,7 @@ core/test_core
 
 # Model sources (*.obj above is for C object files)
 !assets/**/*.obj
+!experiences/**/*.obj
 
 # Python bytecode
 __pycache__/

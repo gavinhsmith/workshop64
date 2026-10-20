@@ -22,7 +22,7 @@ include ../../core/core.mk
 TARGET := hangout64_$(PLATFORM)
 BUILD  := build/$(PLATFORM)
 OBJS   := $(BUILD)/main.o $(addprefix $(BUILD)/,$(CORE_OBJ))
-CFLAGS := -O2 -Wall $(MACHDEP) -I$(LIBOGC_INC) -I$(CORE) -MMD -MP
+CFLAGS := -O2 -Wall $(MACHDEP) -I$(LIBOGC_INC) $(CORE_INC) -MMD -MP
 LIBS   := -L$(LIBOGC_LIB) $(if $(filter wii,$(PLATFORM)),-lwiiuse -lbte) -logc -lm
 
 .DEFAULT_GOAL := $(TARGET).dol
@@ -37,10 +37,10 @@ $(BUILD)/$(TARGET).elf: $(OBJS)
 $(BUILD)/%.o: %.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/%.o: $(CORE)/%.c | $(BUILD)
+$(BUILD)/%.o: $(CORE)/%.c $(CORE_HDR) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/%.o: $(GEN)/%.c | $(BUILD)
+$(BUILD)/%.o: $(GEN)/%.c $(CORE_HDR) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD):

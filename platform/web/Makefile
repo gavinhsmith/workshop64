@@ -9,7 +9,7 @@ CC      := emcc
 BUILD   := build
 OUT     := $(ROOT)/build/web
 OBJS    := $(BUILD)/main.o $(addprefix $(BUILD)/,$(CORE_OBJ))
-CFLAGS  := -O2 -Wall --use-port=sdl3 -I$(CORE) -MMD -MP
+CFLAGS  := -O2 -Wall --use-port=sdl3 $(CORE_INC) -MMD -MP
 LDFLAGS := --use-port=sdl3 -sALLOW_MEMORY_GROWTH --shell-file shell.html
 
 all: $(OUT)/index.html
@@ -20,10 +20,10 @@ $(OUT)/index.html: $(OBJS) shell.html | $(OUT)
 $(BUILD)/%.o: %.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/%.o: $(CORE)/%.c | $(BUILD)
+$(BUILD)/%.o: $(CORE)/%.c $(CORE_HDR) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/%.o: $(GEN)/%.c | $(BUILD)
+$(BUILD)/%.o: $(GEN)/%.c $(CORE_HDR) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD) $(OUT):

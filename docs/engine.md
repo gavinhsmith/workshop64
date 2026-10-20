@@ -439,11 +439,13 @@ resolved by file name from `textures/`). *Proposed:* the model is centred on X/Z
 at the part's bottom, as today; named objects (`o`/`g`) are its sub-objects, and `collision` /
 `col_*` objects are its collision shapes (§9.1).
 
-**Packing.** *Proposed:* `tools/wb64.py <folder> [-o file.wb64]` (Python standard library only)
-copies the logic files byte for byte and converts assets to their canonical forms and variants
-(§9). It runs the same checks the console will (references, budgets, rotation steps, texture
-colours) and reports each problem with its file and line. The console checks everything again
-on load.
+**Packing.** *Decided:* `tools/wb64.py <folder> <file.wb64>` (Python standard library only)
+copies the logic files byte for byte and converts assets to their canonical forms (and later
+variants, §9), checking the assets as it goes. It doesn't read the Lua files: the engine's own
+loader is the one place logic is checked, so there is no second implementation to drift. Run the
+result in the PC build or the core tests to check it; each problem names the file and the node
+(`scenes/course.lua/stairs/2: unknown field 'rot'`), with a line number for Lua errors. Every
+console checks everything again on load.
 
 **Running without packing.** *Proposed:* the PC build can run an experience folder directly and
 reload it when a file changes, with strict mode (§13) on, so creators can iterate without packing.
@@ -638,12 +640,12 @@ What hangout64 already has, and what changes:
 | Platforms, CI | All seven (with the web) build in Docker/CI, releases on tags | Keep |
 | Maths | Integer core, `isin`/`icos` | Keep |
 | World | Fixed 20×20 floor + up to 256 unrotated box parts | Parts only, baseplate as a part, wedges, 45° rotation, scene settings |
-| Content | `assets/scene/course.json` packed into an `HG64` place file (TEXR/MESH/PART chunks), built in | An experience folder (§11.6) packed into a `.wb64`: Lua-table logic shipped as-is, plus canonical/variant assets |
+| Content | `experiences/course/` (§11.6) packed into a `.wb64` with logic, canonical textures and models; built in. Scenes take parts and groups (no rotation, wedges or scene settings yet); one scene per experience | Variants, sessions with several scenes, the rest of §11.6 |
 | Assets | OBJ models, 16-colour PNG textures converted on load | Canonical forms + tool-made variants; collision in models |
 | Rendering | Each `main.c` draws the level itself | Core draw list; ports render it their own way |
 | Timing | Fixed 30 Hz tick on every platform (`ticker_due` in the core); drawn at display rate without interpolation | Keep; interpolate where a port can afford it |
 | Avatar | 412-triangle guy, tinted coat, run hop | Count it against the budget; customisation as data |
-| Scripting | Lua 5.4.9 as a submodule in `third_party/lua`, measured in §16; not in the game yet | §7 |
+| Scripting | Lua 5.4.9 (submodule, 32-bit numbers, no standard libraries) reads the logic files with memory and instruction caps; scripts don't run yet | §7 |
 | UI, audio, networking, saves | None | §14, §9.4, §10, §11.4 |
 
 Suggested order of work:

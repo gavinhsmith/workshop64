@@ -42,9 +42,10 @@ keeping 4:3.
 
 ## Building
 
-Every build needs Python 3 (standard library only): the built-in models, textures and place
-are generated into `build/gen` from `assets/`. On Windows, where `python3` may be the Store stub,
-pass `PYTHON=python` to make.
+Every build needs Python 3 (standard library only): the avatar and the built-in experience
+are generated into `build/gen` from `assets/` and `experiences/course/`. Lua is a submodule:
+clone with `--recursive` or run `git submodule update --init`. On Windows, where `python3` may
+be the Store stub, pass `PYTHON=python` to make.
 
 ```sh
 make test   # core unit tests (host compiler)
@@ -67,21 +68,34 @@ make n64-reset  # drop the cached N64 toolchain + libdragon volume (e.g. after a
 - Web: serve `build/web/` over HTTP (browsers won't load wasm from `file://`), e.g.
   `python3 -m http.server -d build/web`, then open http://localhost:8000
 
-## Places
+## Experiences
 
-A place is the content of one game: parts (boxes, optionally drawn with a custom model), the
-models they use, and the models' textures. Places are data, loaded and validated at runtime by `core/place.c`,
-so they can be delivered over the network later. The built-in place is
-`assets/scene/course.json`, packed into C by the build. To pack one by hand:
+An experience is a folder of plain files (see [the spec, section 11.6](docs/engine.md#116-development-format)),
+packed into one `.wb64` file that is loaded and validated at runtime by `core/wb64.c`, so it
+can be delivered over the network later. The built-in experience is `experiences/course/`,
+packed into C by the build:
 
-```sh
-python3 tools/placec.py assets/scene/course.json course.place   # binary
+```
+experiences/course/
+  experience.lua          manifest: id, title, version, API version, start scene
+  scenes/course.lua       the scene: a tree of parts and groups, as a Lua table
+  models/crate.obj, .mtl  models at real size; colour and texture from the .mtl
+  textures/crate.png
 ```
 
-The format is described at the top of `tools/placec.py`. Budgets (parts, meshes, textures,
-triangles) are in `core/world.h` and are sized for the weakest console. Textures are PNGs with
-at most 16 colours, up to 32 px per side (32x32 fits the N64's texture memory), padded to a
-power of two if needed; they are drawn nearest-filtered and tinted by the model's colour.
+To pack one by hand:
+
+```sh
+python3 tools/wb64.py experiences/course course.wb64
+```
+
+The packer converts models and textures and copies the Lua files as they are; the engine
+checks those when it loads them (any mistake names the file and part), so run the result in
+the PC build or `make test`. The format is described at the top of `tools/wb64.py`. Budgets
+(parts, models, textures, triangles) are in `core/world.h` and are sized for the weakest
+console. Textures are PNGs with at most 16 colours, up to 32 px per side (32x32 fits the N64's
+texture memory), padded to a power of two if needed; they are drawn nearest-filtered and
+tinted by the model's colour.
 
 Engine assets (like the avatar) are compiled in instead, with `tools/obj2c.py` (also run by the build). The avatar's
 texture is the atlas `assets/texture/guy_base.png` with `guy_coat.png` layered on top; the
