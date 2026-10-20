@@ -43,8 +43,19 @@ the camera button:
 
 On the Wii a GameCube pad works too, with the GameCube layout.
 
-On PC and web, `/` opens a chat line: type, Enter posts it (for now it just echoes as
-`TestPlayer: <msg>`, nobody else sees it), Esc cancels; the game ignores keys while it's open.
+Chat (for now it just echoes as `TestPlayer: <msg>`; nobody else sees it). The game ignores
+input while it's open.
+
+| Platform | Open | Keyboard | Send | Cancel |
+|---|---|---|---|---|
+| PC, web | `/` | your keyboard | Enter | Esc |
+| 3DS | Y | the system keyboard | OK | Cancel |
+| DS | SELECT | touch keyboard on the bottom screen | Enter | B |
+| N64 | Z | on screen: D-pad moves, A types, B deletes | Start | B when empty |
+| GameCube | Y | on screen, as N64 | START | B when empty |
+| Wii Remote | B + 1 | on screen, as N64 | + | B when empty |
+
+On DS and 3DS the chat is shown on the bottom screen.
 
 On PC and web, click to capture the mouse for the camera; Esc lets it go (on PC, Esc again
 quits). The mouse works like the GameCube's C-stick: moving it a little turns the camera a

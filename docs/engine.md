@@ -549,9 +549,10 @@ ui.capture(frame)                       -- raw directions and buttons while open
 
 ### 14.3 Text input
 
-*Decided:* one simple engine keyboard, Xbox-style, on every platform. Native system keyboards are
-not used, to keep one look; physical keyboards (PC, USB on Wii) type into the same keyboard
-screen, and DS/3DS touch can tap its keys.
+*Decided:* native input where the platform has it: a physical keyboard on PC and web, the system
+keyboard on 3DS, libnds's touch keyboard on DS. Elsewhere (N64, GameCube, Wii) a simple engine
+QWERTY keyboard (`keyboard_update`, `chat_draw` in `core/text.c`) takes the bottom of the safe
+area and pushes the text being typed up above it.
 
 ```
  ┌──────────────────────────────┐
@@ -572,16 +573,9 @@ screen, and DS/3DS touch can tap its keys.
 - Experiences call `ui.prompt_text{title=…, max=16, charset="name"|"number"|"text"}` and get the
   result in a callback. The engine enforces the length and character set (disallowed keys are
   greyed out).
-- Alphabetical grid, fits the safe area with the fixed font; Shift and a symbols page.
-
-| Action | N64 | GameCube | Wii Remote | DS / 3DS | PC |
-|---|---|---|---|---|---|
-| Type key | A | A | A | A | any key |
-| Backspace (cancel when empty) | B | B | B | B | Backspace |
-| Space | C-down | Y | 1 | Y | Space |
-| Shift / symbols | C-up | X | 2 | X | Shift |
-| Move cursor | L / R | L / R | − / + | L / R | arrows |
-| Confirm | Start | Start | ✓ key | Start | Enter |
+- The engine keyboard: number row, three QWERTY rows, then Shift, Space, Del and OK; Shift
+  swaps in capitals and symbols. Built: D-pad moves, A types, B deletes (cancels when empty),
+  Start (Wii Remote: +) sends. *Proposed:* button shortcuts for space and shift, a text cursor.
 
 - Chat adds recent-message recall and preset phrases on a shoulder button: typing on a controller
   is slow.
@@ -597,7 +591,7 @@ screen, and DS/3DS touch can tap its keys.
 | N64 caching and networking specifics | Deferred until N64 networking is in focus. |
 | Terrain (heightmaps, voxels) | Rejected: the world is parts only. |
 | Standalone export | Rejected: workshop64 isn't a general game engine. |
-| Native system keyboards | Not used, to keep one look. |
+| Native system keyboards | Used where the platform has one (§14.3). |
 | Skeletal animation, dynamic lighting | Out of scope. |
 
 ## 16. Measurements
@@ -662,7 +656,7 @@ What the prototype already has, and what changes:
 | Timing | Fixed 30 Hz tick on every platform (`ticker_due` in the core); drawn at display rate without interpolation | Keep; interpolate where a port can afford it |
 | Avatar | 146-triangle low-poly cartoon figure (square head, dress body, two-section box limbs bending at elbows and knees), animated as whole parts (§9.1: idle, walk, run, jump, fall, eased between), coat-coloured dress | Count it against the budget; customisation as data |
 | Scripting | Lua 5.4.9 (submodule, 32-bit numbers, no standard libraries) reads the logic files with memory and instruction caps; scripts don't run yet | §7 |
-| Text, chat | The engine font (5x7, `assets/font.txt`, built into C); a local-only chat on PC and web (`/` to type, echoed as `TestPlayer: <msg>`) | §9.3, §11.5, §14.3 |
+| Text, chat | The engine font (5x7, `assets/font.txt`, built into C); a local-only chat on every platform (echoed as `TestPlayer: <msg>`; see the README for the buttons) | §9.3, §11.5, §14.3 |
 | UI, audio, networking, saves | None | §14, §9.4, §10, §11.4 |
 
 Suggested order of work:

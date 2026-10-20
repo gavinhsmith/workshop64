@@ -281,6 +281,15 @@ static void tri_normal(const mesh *m, int t, double n[3])
     n[2] = u[0] * v[1] - u[1] * v[0];
 }
 
+/* Counts chat_draw's rects and keeps the highest top. */
+static void bounds_rect(int x, int y, int w, int h, const uint8_t rgb[3], void *ctx)
+{
+    int *r = ctx;
+    (void)x, (void)w, (void)h, (void)rgb;
+    r[0]++;
+    r[1] = y < r[1] ? y : r[1];
+}
+
 static void count_rect(int x, int y, int w, int h, void *ctx)
 {
     int *r = ctx; /* runs, lit pixels, then the first run's x, y, w */
@@ -325,6 +334,32 @@ static void test_text(void)
     for (int i = 0; i < 10; i++)
         chat_say(&log, "TestPlayer", "again", 9 + i);
     assert(log.count == CHAT_LINES && strcmp(log.lines[CHAT_LINES - 1], "TestPlayer: again") == 0 && log.said[CHAT_LINES - 1] == 18);
+
+    /* The on-screen keyboard: the button that opened it doesn't type; A types the key under
+     * the cursor; along the last row (Shift, Space, Del, OK) the cursor steps a key at a time;
+     * it says what happened only once the buttons are let go. */
+    keyboard kb = keyboard_open();
+    unsigned seq[] = {KB_TYPE, 0, KB_TYPE, 0, KB_RIGHT, 0, KB_TYPE, 0,          /* (the opening press), q, w */
+                      KB_DOWN, 0, KB_DOWN, 0, KB_DOWN, 0, KB_TYPE, 0, KB_UP, 0, KB_UP, 0, KB_TYPE, 0, /* Shift, S */
+                      KB_DOWN, 0, KB_DOWN, 0, KB_RIGHT, 0, KB_TYPE, 0,          /* Space */
+                      KB_RIGHT, 0, KB_TYPE, 0, KB_RIGHT, 0, KB_TYPE};           /* Del, OK */
+    for (size_t i = 0; i < sizeof seq / sizeof *seq; i++)
+        assert(keyboard_update(&kb, seq[i]) == KB_TYPING);
+    assert(strcmp(kb.text, "qwS") == 0 && kb.result == KB_SEND);
+    assert(keyboard_update(&kb, 0) == KB_SEND);
+    kb = keyboard_open();
+    keyboard_update(&kb, 0);
+    keyboard_update(&kb, KB_TYPE);
+    keyboard_update(&kb, 0);
+    keyboard_update(&kb, KB_BACK); /* deletes the q */
+    keyboard_update(&kb, 0);
+    assert(kb.text[0] == '\0' && keyboard_update(&kb, KB_BACK) == KB_TYPING && keyboard_update(&kb, 0) == KB_CANCEL);
+
+    /* The keyboard pushes the chat up: its lines are drawn higher with it than without. */
+    int with[2] = {0, SCREEN_H}, without[2] = {0, SCREEN_H};
+    chat_draw(&log, "", &kb, 18, SCREEN_W, SCREEN_H, bounds_rect, with);
+    chat_draw(&log, "", NULL, 18, SCREEN_W, SCREEN_H, bounds_rect, without);
+    assert(with[0] > without[0] && with[1] < without[1] && with[1] >= (SCREEN_H - 192) / 2);
 }
 
 /* At most 160 triangles (four fit the DS's budget beside a full scene), from the feet to

@@ -297,40 +297,22 @@ static vertex text_buf[6 * 4096];   /* this frame's text, two triangles per run 
 static int text_n;
 static GLuint text_vbo;
 
-static void text_rect(int x, int y, int w, int h, void *ctx)
+static void chat_rect(int x, int y, int w, int h, const uint8_t rgb[3], void *ctx)
 {
-    const uint8_t *c = ctx;
+    (void)ctx;
     if (text_n + 6 > (int)SDL_arraysize(text_buf))
         return;
     const int16_t px[6][2] = {{x, y}, {x + w, y}, {x + w, y + h}, {x, y}, {x + w, y + h}, {x, y + h}};
     for (int i = 0; i < 6; i++)
-        text_buf[text_n++] = (vertex){px[i][0], px[i][1], 0, 0, 0, c[0], c[1], c[2], 0};
+        text_buf[text_n++] = (vertex){px[i][0], px[i][1], 0, 0, 0, rgb[0], rgb[1], rgb[2], 0};
 }
 
-/* White with a dark shadow, so it reads over anything. */
-static void draw_text(const char *s, int x, int y)
-{
-    static const uint8_t shadow[3] = {0, 0, 0}, white[3] = {255, 255, 255};
-    text_draw(s, x + 1, y + 1, text_rect, (void *)shadow);
-    text_draw(s, x, y, text_rect, (void *)white);
-}
-
-/* The chat in the bottom left of the UI safe area (256x192, centred), over the frame. */
+/* The chat over the frame (see chat_draw). */
 static void draw_chat(void)
 {
     glDisable(GL_CULL_FACE); /* y runs down here, which turns quads over */
     text_n = 0;
-    int x = (frame_w - 256) / 2 + 2, y = (SCREEN_H + 192) / 2 - 2 - FONT_H;
-    if (typing) {
-        char line[CHAT_COLS + 1];
-        const char *tail = draft + (strlen(draft) > CHAT_COLS - 3 ? strlen(draft) - (CHAT_COLS - 3) : 0);
-        snprintf(line, sizeof line, "> %s_", tail);
-        draw_text(line, x, y);
-        y -= FONT_LINE;
-    }
-    for (int i = chat.count - 1; i >= 0; i--, y -= FONT_LINE)
-        if (typing || ticks - chat.said[i] < CHAT_SHOW)
-            draw_text(chat.lines[i], x, y);
+    chat_draw(&chat, typing ? draft : NULL, NULL, ticks, frame_w, SCREEN_H, chat_rect, NULL);
     if (!text_n)
         return;
     /* Pixels, y down, onto the frame (the shader divides positions by 256). */

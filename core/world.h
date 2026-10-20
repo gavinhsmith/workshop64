@@ -299,8 +299,8 @@ long long isqrt(long long v);
 int text_width(const char *s);
 void text_draw(const char *s, int x, int y, void (*rect)(int x, int y, int w, int h, void *ctx), void *ctx);
 
-/* A basic chat log (for now just local, on PC and web): the last CHAT_LINES lines, wrapped
- * CHAT_COLS across to fit the UI safe area, each with the tick it was said. */
+/* A basic chat log (for now just local): the last CHAT_LINES lines, wrapped CHAT_COLS across
+ * to fit the UI safe area, each with the tick it was said. */
 #define CHAT_LINES 6
 #define CHAT_COLS (256 / FONT_ADVANCE)
 #define CHAT_MAX 64            /* characters in a message */
@@ -313,5 +313,29 @@ typedef struct {
 
 /* Add "who: msg" (printable ASCII only, the message cut to CHAT_MAX characters). */
 void chat_say(chat_log *log, const char *who, const char *msg, int now);
+
+/* The on-screen QWERTY keyboard, for consoles without a native one: KB_ROWS rows of
+ * KB_COLS keys (the last row is Shift, Space, Del and OK), moved over with the d-pad. Feed it
+ * the held KB_* buttons once a frame; it types into `text`. It says KB_SEND or KB_CANCEL
+ * once those buttons are let go, so the press that closed it doesn't reach the game. */
+#define KB_ROWS 5
+#define KB_COLS 10
+enum { KB_UP = 1, KB_DOWN = 2, KB_LEFT = 4, KB_RIGHT = 8, KB_TYPE = 16, KB_BACK = 32, KB_DONE = 64 };
+enum { KB_TYPING, KB_SEND, KB_CANCEL };
+typedef struct {
+    char text[CHAT_MAX + 1];
+    int row, col, shift;
+    unsigned held;   /* last frame's buttons: each press counts once */
+    int result;      /* KB_SEND or KB_CANCEL once closed, waiting for the buttons to be let go */
+} keyboard;
+keyboard keyboard_open(void);
+int keyboard_update(keyboard *k, unsigned buttons);
+
+/* Draw the chat over a screen_w x screen_h frame, in the bottom left of the UI safe area:
+ * the log's recent lines, then, when draft isn't NULL, "> draft_" with the whole log; a
+ * keyboard (if given) takes the bottom of the safe area and pushes the rest up. `rect` fills
+ * screen pixels (y down) in a colour. */
+void chat_draw(const chat_log *log, const char *draft, const keyboard *kb, int now, int screen_w, int screen_h,
+               void (*rect)(int x, int y, int w, int h, const uint8_t rgb[3], void *ctx), void *ctx);
 
 #endif

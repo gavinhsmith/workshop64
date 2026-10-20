@@ -153,11 +153,36 @@ static unsigned read_input(u32 keys)
     return in;
 }
 
+/* The chat: Y opens the system keyboard, and what's said is printed on the bottom screen
+ * under the controls. */
+static chat_log chat;
+
+static void show_chat(void)
+{
+    consoleClear();
+    printf("workshop64\n\nCircle pad: move\nA:          jump\nB:          run\nD-pad:      orbit\nL/R:        zoom\nX:          camera\nY:          chat\nSTART:      exit\n\n");
+    for (int i = 0; i < chat.count; i++)
+        printf("%s\n", chat.lines[i]);
+}
+
+/* Blocks while the keyboard is up (the game pauses; the ticker drops the missed ticks). */
+static void type_chat(void)
+{
+    SwkbdState kb;
+    char text[CHAT_MAX * 4 + 1]; /* UTF-8; chat_say keeps only the ASCII */
+    swkbdInit(&kb, SWKBD_TYPE_NORMAL, 2, CHAT_MAX);
+    swkbdSetHintText(&kb, "Chat");
+    if (swkbdInputText(&kb, text, sizeof text) == SWKBD_BUTTON_CONFIRM && text[0]) {
+        chat_say(&chat, "TestPlayer", text, 0);
+        show_chat();
+    }
+}
+
 int main(void)
 {
     gfxInitDefault();
     consoleInit(GFX_BOTTOM, NULL);
-    printf("workshop64\n\nCircle pad: move\nA:          jump\nB:          run\nD-pad:      orbit\nL/R:        zoom\nX:          camera\nSTART:      exit\n");
+    show_chat();
 
     C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
     /* The top screen is physically rotated: its framebuffer is 240 wide, 400 tall. */
@@ -202,6 +227,8 @@ int main(void)
         hidScanInput();
         if (hidKeysDown() & KEY_START)
             break;
+        if (hidKeysDown() & KEY_Y)
+            type_chat();
         unsigned b = read_input(hidKeysHeld());
         for (int n = ticker_due(&tk, now_us()); n > 0; n--) {
             input in[MAX_PLAYERS] = {{b, cam.now.yaw, 0, 0}};

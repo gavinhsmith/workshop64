@@ -48,7 +48,8 @@ static void bind_texture(const mesh *m)
     }
 }
 
-/* Stick moves, A jumps, B runs, D-pad orbits, C-up/C-down zoom in/out, R switches the camera. */
+/* Stick moves, A jumps, B runs, D-pad orbits, C-up/C-down zoom in/out, R switches the camera.
+ * Z opens the chat. */
 static unsigned read_input(void)
 {
     joypad_poll();
@@ -69,6 +70,22 @@ static unsigned read_input(void)
     if (b.a)       bits |= JUMP;
     if (b.b)       bits |= RUN;
     return bits;
+}
+
+/* The on-screen keyboard: D-pad moves, A types, B deletes (cancels when empty), Start sends. */
+static unsigned read_keyboard(void)
+{
+    joypad_buttons_t b = joypad_get_buttons_held(JOYPAD_PORT_1);
+    return (b.d_up ? KB_UP : 0) | (b.d_down ? KB_DOWN : 0) | (b.d_left ? KB_LEFT : 0) | (b.d_right ? KB_RIGHT : 0) |
+           (b.a ? KB_TYPE : 0) | (b.b ? KB_BACK : 0) | (b.start ? KB_DONE : 0);
+}
+
+/* Chat rectangles, filled by the RDP straight into the frame. */
+static void chat_rect(int x, int y, int w, int h, const uint8_t rgb[3], void *ctx)
+{
+    (void)ctx;
+    rdpq_set_fill_color(RGBA32(rgb[0], rgb[1], rgb[2], 255));
+    rdpq_fill_rectangle(x, y, x + w, y + h);
 }
 
 static void draw_mesh(const mesh *m)
@@ -119,6 +136,9 @@ int main(void)
     upload_textures();
     camera cam = camera_init();
     ticker tk = {0};
+    chat_log chat = {0};
+    keyboard kb;
+    int typing = 0, ticks = 0; /* Z opens the chat keyboard */
     GLuint level_list = compile_mesh(&level_mesh), avatar_lists[MAX_PLAYERS][AVATAR_PARTS];
     for (int i = 0; i < MAX_PLAYERS; i++)
         for (int k = 0; k < AVATAR_PARTS; k++)
@@ -176,9 +196,23 @@ int main(void)
         }
 
         gl_context_end();
+        rdpq_set_mode_fill(RGBA32(0, 0, 0, 255));
+        chat_draw(&chat, typing ? kb.text : NULL, typing ? &kb : NULL, ticks, SCREEN_W, SCREEN_H, chat_rect, NULL);
         rdpq_detach_show();
         unsigned b = read_input();
-        for (int n = ticker_due(&tk, get_ticks_us()); n > 0; n--) {
+        if (typing) {
+            int r = keyboard_update(&kb, read_keyboard());
+            if (r == KB_SEND && kb.text[0])
+                chat_say(&chat, "TestPlayer", kb.text, ticks);
+            typing = r == KB_TYPING;
+            b = 0; /* typing doesn't move you */
+        } else if (joypad_get_buttons_pressed(JOYPAD_PORT_1).z) {
+            typing = 1;
+            kb = keyboard_open();
+        }
+        int n = ticker_due(&tk, get_ticks_us());
+        ticks += n;
+        for (; n > 0; n--) {
             input in[MAX_PLAYERS] = {{b, cam.now.yaw, 0, 0}};
             w = world_update(w, in);
             cam = camera_update(cam, in[0], &w);

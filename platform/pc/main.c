@@ -179,27 +179,17 @@ static chat_log chat;
 static char draft[CHAT_MAX + 1];
 static int typing, skip_slash, ticks; /* skip_slash: the / that opened it may arrive as text */
 
-static void text_rect(int x, int y, int w, int h, void *ctx)
+static void chat_rect(int x, int y, int w, int h, const uint8_t rgb[3], void *ctx)
 {
     (void)ctx;
+    glColor3ubv(rgb);
     glVertex2i(x, y);
     glVertex2i(x + w, y);
     glVertex2i(x + w, y + h);
     glVertex2i(x, y + h);
 }
 
-/* White with a dark shadow, so it reads over anything. */
-static void draw_text(const char *s, int x, int y)
-{
-    glBegin(GL_QUADS);
-    glColor3ub(0, 0, 0);
-    text_draw(s, x + 1, y + 1, text_rect, NULL);
-    glColor3ub(255, 255, 255);
-    text_draw(s, x, y, text_rect, NULL);
-    glEnd();
-}
-
-/* The chat in the bottom left of the UI safe area (256x192, centred), over the frame. */
+/* The chat over the frame (see chat_draw). */
 static void draw_chat(int sw)
 {
     glMatrixMode(GL_PROJECTION);
@@ -210,17 +200,9 @@ static void draw_chat(int sw)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE); /* y runs down here, which turns quads over */
     glDisable(GL_TEXTURE_2D);
-    int x = (sw - 256) / 2 + 2, y = (SCREEN_H + 192) / 2 - 2 - FONT_H;
-    if (typing) {
-        char line[CHAT_COLS + 1];
-        const char *tail = draft + (strlen(draft) > CHAT_COLS - 3 ? strlen(draft) - (CHAT_COLS - 3) : 0);
-        snprintf(line, sizeof line, "> %s_", tail);
-        draw_text(line, x, y);
-        y -= FONT_LINE;
-    }
-    for (int i = chat.count - 1; i >= 0; i--, y -= FONT_LINE)
-        if (typing || ticks - chat.said[i] < CHAT_SHOW)
-            draw_text(chat.lines[i], x, y);
+    glBegin(GL_QUADS);
+    chat_draw(&chat, typing ? draft : NULL, NULL, ticks, sw, SCREEN_H, chat_rect, NULL);
+    glEnd();
 }
 
 static void chat_close(SDL_Window *win)

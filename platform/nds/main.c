@@ -1,5 +1,6 @@
 #include <nds.h>
 #include <stdio.h>
+#include <string.h>
 #include "world.h"
 
 static place pl; /* the loaded place; mesh parts are drawn from it */
@@ -98,12 +99,61 @@ static void draw_mesh(const mesh *m)
     glPopMatrix(1);
 }
 
+/* The chat lives on the bottom screen: SELECT brings up libnds's touch keyboard over its
+ * lower half; Enter says the line, B (or the keyboard's top-left key) cancels. */
+static chat_log chat;
+static char draft[CHAT_MAX + 1];
+static int typing;
+
+/* Reprint the bottom screen: the controls and the chat, or while typing (the keyboard covers
+ * the lower half) the last few lines and the draft. */
+static void show_chat(void)
+{
+    consoleClear();
+    if (!typing)
+        printf("workshop64\n\nD-pad:     move\nA:         jump\nB:         run\nR + D-pad: orbit\nX/Y:       zoom\nL:         camera\nSELECT:    chat\nSTART:     exit\n\n");
+    for (int i = typing && chat.count > 3 ? chat.count - 3 : 0; i < chat.count; i++)
+        printf("%s\n", chat.lines[i]);
+    if (typing)
+        printf("> %s_", draft);
+}
+
+static void chat_update(u32 down)
+{
+    if (!typing) {
+        if (down & KEY_SELECT) {
+            typing = 1;
+            draft[0] = '\0';
+            keyboardShow();
+            show_chat();
+        }
+        return;
+    }
+    int c = keyboardUpdate();
+    size_t n = strlen(draft);
+    if (c == DVK_ENTER || c == DVK_FOLD || (down & KEY_B)) {
+        if (c == DVK_ENTER && n)
+            chat_say(&chat, "TestPlayer", draft, 0);
+        typing = 0;
+        keyboardHide();
+    } else if (c == DVK_BACKSPACE && n) {
+        draft[n - 1] = '\0';
+    } else if (c >= ' ' && c <= '~' && n < CHAT_MAX) {
+        draft[n] = (char)c, draft[n + 1] = '\0';
+    } else {
+        return; /* nothing changed */
+    }
+    show_chat();
+}
+
 /* The DS renders at its native 256x192 (still 4:3, so same camera). */
 int main(void)
 {
     videoSetMode(MODE_0_3D);
     consoleDemoInit(); /* text console on the bottom screen */
-    printf("workshop64\n\nD-pad:     move\nA:         jump\nB:         run\nR + D-pad: orbit\nX/Y:       zoom\nL:         camera\nSTART:     exit\n");
+    keyboardDemoInit();
+    keyboardHide();
+    show_chat();
     glInit();
     glClearColor(3, 3, 5, 31);
     glClearPolyID(63);
@@ -129,6 +179,7 @@ int main(void)
         scanKeys();
         if (keysDown() & KEY_START)
             break;
+        chat_update(keysDown());
 
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
@@ -172,7 +223,7 @@ int main(void)
 
         glFlush(0);
         swiWaitForVBlank();
-        unsigned b = read_input(keysHeld());
+        unsigned b = typing ? 0 : read_input(keysHeld()); /* typing doesn't move you */
         for (int n = ticker_due(&tk, now_us()); n > 0; n--) {
             input in[MAX_PLAYERS] = {{b, cam.now.yaw, 0, 0}};
             w = world_update(w, in);

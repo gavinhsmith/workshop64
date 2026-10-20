@@ -1,4 +1,5 @@
-/* Text in the engine font (assets/font.txt), and a basic chat log. */
+/* Text in the engine font (assets/font.txt), a basic chat log and the on-screen keyboard. */
+#include <stdio.h>
 #include <string.h>
 #include "world.h"
 
@@ -66,4 +67,138 @@ void chat_say(chat_log *log, const char *who, const char *msg, int now)
         log->lines[log->count][shown] = '\0';
         log->said[log->count++] = now;
     }
+}
+
+/* The keyboard's keys: unshifted and shifted. The last row is kb_special, by column span. */
+static const char kb_keys[2][KB_ROWS - 1][KB_COLS + 1] = {
+    {"1234567890", "qwertyuiop", "asdfghjkl'", "zxcvbnm,.?"},
+    {"!@#$%^&*()", "QWERTYUIOP", "ASDFGHJKL\"", "ZXCVBNM-:/"},
+};
+enum { KB_SHIFT, KB_SPACE, KB_DEL, KB_OK };
+static const struct {
+    int start, end;
+    const char *label;
+} kb_special[] = {{0, 2, "SHIFT"}, {2, 7, "SPACE"}, {7, 9, "DEL"}, {9, 10, "OK"}};
+#define KB_KEY_W 25 /* 10 across fill the safe area */
+#define KB_KEY_H 12
+
+static int kb_span(int col)
+{
+    int i = 0;
+    while (col >= kb_special[i].end)
+        i++;
+    return i;
+}
+
+keyboard keyboard_open(void)
+{
+    keyboard k = {.row = 1}; /* on the q */
+    k.held = ~0u;            /* the button that opened it isn't a press */
+    return k;
+}
+
+int keyboard_update(keyboard *k, unsigned buttons)
+{
+    unsigned pressed = buttons & ~k->held;
+    k->held = buttons;
+    if (!k->result) {
+        const int last = KB_ROWS - 1;
+        size_t n = strlen(k->text);
+        if (pressed & KB_UP && k->row > 0)
+            k->row--;
+        if (pressed & KB_DOWN && k->row < last)
+            k->row++;
+        /* Along the last row, step a whole key at a time. */
+        if (pressed & KB_LEFT)
+            k->col = k->row == last ? kb_special[kb_span(k->col)].start - 1 : k->col - 1;
+        if (pressed & KB_RIGHT)
+            k->col = k->row == last ? kb_special[kb_span(k->col)].end : k->col + 1;
+        k->col = k->col < 0 ? 0 : k->col >= KB_COLS ? KB_COLS - 1 : k->col;
+        int special = k->row == last ? kb_span(k->col) : -1;
+        if (pressed & KB_TYPE) {
+            if (special == KB_SHIFT)
+                k->shift ^= 1;
+            else if (special == KB_DEL && n)
+                k->text[--n] = '\0';
+            else if (special == KB_OK)
+                k->result = KB_SEND;
+            else if (special != KB_DEL && n < CHAT_MAX)
+                k->text[n++] = special == KB_SPACE ? ' ' : kb_keys[k->shift][k->row][k->col], k->text[n] = '\0';
+        }
+        if (pressed & KB_BACK) {
+            if (n)
+                k->text[n - 1] = '\0';
+            else
+                k->result = KB_CANCEL;
+        }
+        if (pressed & KB_DONE)
+            k->result = KB_SEND;
+    }
+    return k->result && !buttons ? k->result : KB_TYPING;
+}
+
+/* text_draw's rect, filling in one colour through chat_draw's. */
+typedef struct {
+    void (*rect)(int x, int y, int w, int h, const uint8_t rgb[3], void *ctx);
+    void *ctx;
+    const uint8_t *rgb;
+} painter;
+
+static void paint(int x, int y, int w, int h, void *ctx)
+{
+    const painter *p = ctx;
+    p->rect(x, y, w, h, p->rgb, p->ctx);
+}
+
+/* White with a dark shadow, so it reads over anything. */
+static void label(painter *p, const char *s, int x, int y)
+{
+    static const uint8_t shadow[3] = {0, 0, 0}, white[3] = {255, 255, 255};
+    p->rgb = shadow;
+    text_draw(s, x + 1, y + 1, paint, p);
+    p->rgb = white;
+    text_draw(s, x, y, paint, p);
+}
+
+void chat_draw(const chat_log *log, const char *draft, const keyboard *kb, int now, int screen_w, int screen_h,
+               void (*rect)(int x, int y, int w, int h, const uint8_t rgb[3], void *ctx), void *ctx)
+{
+    static const uint8_t key[3] = {40, 40, 56}, lit[3] = {200, 140, 0};
+    painter p = {rect, ctx, NULL};
+    int left = (screen_w - 256) / 2, bottom = (screen_h + 192) / 2; /* the UI safe area */
+    if (kb) {
+        const int last = KB_ROWS - 1;
+        int kx = left + (256 - KB_COLS * KB_KEY_W) / 2, ky = bottom - 2 - KB_ROWS * KB_KEY_H;
+        for (int r = 0; r < KB_ROWS; r++) {
+            for (int c = 0; c < KB_COLS; c++) {
+                char ch[2] = {0, 0};
+                const char *name = ch;
+                int end = c + 1, on = r == kb->row && c == kb->col;
+                if (r == last) {
+                    int i = kb_span(c);
+                    if (kb_special[i].start != c)
+                        continue; /* drawn from its first column */
+                    end = kb_special[i].end, name = kb_special[i].label;
+                    on = r == kb->row && i == kb_span(kb->col);
+                } else {
+                    ch[0] = kb_keys[kb->shift][r][c];
+                }
+                int x = kx + c * KB_KEY_W, y = ky + r * KB_KEY_H, w = (end - c) * KB_KEY_W - 1;
+                rect(x, y, w, KB_KEY_H - 1, on ? lit : key, ctx);
+                label(&p, name, x + (w - text_width(name)) / 2, y + (KB_KEY_H - 1 - FONT_H) / 2);
+            }
+        }
+        bottom = ky;
+    }
+    int x = left + 2, y = bottom - 2 - FONT_H;
+    if (draft) {
+        char line[CHAT_COLS + 1];
+        size_t n = strlen(draft);
+        snprintf(line, sizeof line, "> %s_", draft + (n > CHAT_COLS - 3 ? n - (CHAT_COLS - 3) : 0)); /* its end */
+        label(&p, line, x, y);
+        y -= FONT_LINE;
+    }
+    for (int i = log->count - 1; i >= 0; i--, y -= FONT_LINE)
+        if (draft || now - log->said[i] < CHAT_SHOW)
+            label(&p, log->lines[i], x, y);
 }

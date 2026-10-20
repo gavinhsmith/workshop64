@@ -112,6 +112,8 @@ static void video_init(void)
     GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_POS, GX_POS_XYZ, GX_S16, 8);
     GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_CLR0, GX_CLR_RGB, GX_RGB8, 0);
     GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_TEX0, GX_TEX_ST, GX_S16, 8); /* 8.8, like MESH_ONE */
+    GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_POS, GX_POS_XY, GX_S16, 0); /* chat: whole pixels */
+    GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_CLR0, GX_CLR_RGB, GX_RGB8, 0);
     GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_REG, GX_SRC_VTX, GX_LIGHTNULL, GX_DF_NONE, GX_AF_NONE);
     GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
     GX_SetNumTevStages(1);
@@ -222,6 +224,34 @@ static void draw_scene(const world *w, const camera *cam)
     }
 }
 
+static void chat_rect(int x, int y, int w, int h, const uint8_t rgb[3], void *ctx)
+{
+    (void)ctx;
+    const s16 px[4][2] = {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}};
+    GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+    for (int i = 0; i < 4; i++) {
+        GX_Position2s16(px[i][0], px[i][1]);
+        GX_Color3u8(rgb[0], rgb[1], rgb[2]);
+    }
+    GX_End();
+}
+
+/* The chat over the scene, in its pixels (see chat_draw); after draw_scene, which set the
+ * viewport and untextured colours. */
+static void draw_chat(const chat_log *log, const keyboard *kb, int now)
+{
+    GX_SetCullMode(GX_CULL_NONE);
+    GX_SetZMode(GX_FALSE, GX_ALWAYS, GX_FALSE);
+    Mtx44 ortho;
+    guOrtho(ortho, 0, SCREEN_H, 0, scene_w, 0, 1);
+    GX_LoadProjectionMtx(ortho, GX_ORTHOGRAPHIC);
+    Mtx id;
+    guMtxIdentity(id);
+    guMtxTransApply(id, id, 0.0f, 0.0f, -0.5f);
+    GX_LoadPosMtxImm(id, GX_PNMTX0);
+    chat_draw(log, kb ? kb->text : NULL, kb, now, scene_w, SCREEN_H, chat_rect, NULL);
+}
+
 /* Pass 2: copy the frame to a texture and draw it over the whole EFB with
  * nearest filtering (the VI and copy scalers can only filter). */
 static void draw_upscaled(void)
@@ -288,9 +318,10 @@ static int cstick(int v)
 }
 
 /* GC pad: stick moves, A jumps, B runs, C-stick or D-pad orbits, L/R zoom in/out, Z switches
- * the camera. Wii Remote: D-pad moves, A jumps, 1 runs, B + D-pad orbits, -/+ zoom, 2 switches
- * the camera. START / HOME sets *quit. */
-static unsigned read_input(int *quit, int *look_x, int *look_y)
+ * the camera, Y opens the chat. Wii Remote: D-pad moves, A jumps, 1 runs, B + D-pad orbits,
+ * -/+ zoom, 2 switches the camera, B + 1 opens the chat. START (not while typing) / HOME sets
+ * *quit. The chat keyboard: D-pad moves, A types, B deletes, START / + sends (into *kb). */
+static unsigned read_input(int typing, int *quit, int *look_x, int *look_y, unsigned *kb, int *chat)
 {
     PAD_ScanPads();
     u16 b = PAD_ButtonsHeld(0);
@@ -311,7 +342,11 @@ static unsigned read_input(int *quit, int *look_x, int *look_y)
     if (b & PAD_TRIGGER_Z) in |= CAM_MODE;
     if (b & PAD_BUTTON_A)  in |= JUMP;
     if (b & PAD_BUTTON_B)  in |= RUN;
-    *quit = (PAD_ButtonsDown(0) & PAD_BUTTON_START) != 0;
+    *quit = !typing && (PAD_ButtonsDown(0) & PAD_BUTTON_START);
+    *kb = (b & PAD_BUTTON_UP ? KB_UP : 0) | (b & PAD_BUTTON_DOWN ? KB_DOWN : 0) | (b & PAD_BUTTON_LEFT ? KB_LEFT : 0) |
+          (b & PAD_BUTTON_RIGHT ? KB_RIGHT : 0) | (b & PAD_BUTTON_A ? KB_TYPE : 0) | (b & PAD_BUTTON_B ? KB_BACK : 0) |
+          (b & PAD_BUTTON_START ? KB_DONE : 0);
+    *chat = (PAD_ButtonsDown(0) & PAD_BUTTON_Y) != 0;
 #ifdef HW_RVL
     WPAD_ScanPads();
     u32 w = WPAD_ButtonsHeld(0);
@@ -325,6 +360,10 @@ static unsigned read_input(int *quit, int *look_x, int *look_y)
     if (w & WPAD_BUTTON_2)     in |= CAM_MODE;
     if (w & WPAD_BUTTON_A)     in |= JUMP;
     if (w & WPAD_BUTTON_1)     in |= RUN;
+    *kb |= (w & WPAD_BUTTON_UP ? KB_UP : 0) | (w & WPAD_BUTTON_DOWN ? KB_DOWN : 0) | (w & WPAD_BUTTON_LEFT ? KB_LEFT : 0) |
+           (w & WPAD_BUTTON_RIGHT ? KB_RIGHT : 0) | (w & WPAD_BUTTON_A ? KB_TYPE : 0) | (w & WPAD_BUTTON_B ? KB_BACK : 0) |
+           (w & WPAD_BUTTON_PLUS ? KB_DONE : 0);
+    *chat |= orbit && (WPAD_ButtonsDown(0) & WPAD_BUTTON_1);
     if ((WPAD_ButtonsDown(0) & WPAD_BUTTON_HOME) || power_pressed)
         *quit = 1;
 #endif
@@ -348,8 +387,12 @@ int main(void)
     upload_textures();
     camera cam = camera_init();
     ticker tk = {0};
+    chat_log chat = {0};
+    keyboard kb;
+    int typing = 0, ticks = 0;
     while (!quit) {
         draw_scene(&w, &cam);
+        draw_chat(&chat, typing ? &kb : NULL, ticks);
         draw_upscaled();
 
         GX_DrawDone();
@@ -360,9 +403,22 @@ int main(void)
         VIDEO_SetNextFramebuffer(xfb[fb]);
         VIDEO_Flush();
         VIDEO_WaitVSync();
-        int look_x, look_y;
-        unsigned b = read_input(&quit, &look_x, &look_y);
-        for (int n = ticker_due(&tk, ticks_to_microsecs(gettime())); n > 0; n--) {
+        int look_x, look_y, open;
+        unsigned kb_buttons;
+        unsigned b = read_input(typing, &quit, &look_x, &look_y, &kb_buttons, &open);
+        if (typing) {
+            int r = keyboard_update(&kb, kb_buttons);
+            if (r == KB_SEND && kb.text[0])
+                chat_say(&chat, "TestPlayer", kb.text, ticks);
+            typing = r == KB_TYPING;
+            b = look_x = look_y = 0; /* typing doesn't move you */
+        } else if (open) {
+            typing = 1;
+            kb = keyboard_open();
+        }
+        int n = ticker_due(&tk, ticks_to_microsecs(gettime()));
+        ticks += n;
+        for (; n > 0; n--) {
             input in[MAX_PLAYERS] = {{b, cam.now.yaw, look_x, look_y}};
             w = world_update(w, in);
             cam = camera_update(cam, in[0], &w);
