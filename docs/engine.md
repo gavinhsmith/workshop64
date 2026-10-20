@@ -341,6 +341,113 @@ Controller Pak holds 32 KB total, so about 1–2 KB per experience there.
 enforces rate and length limits, and supports per-player mute, block and reporting. Experiences
 receive only filtered messages, and only if they ask for chat access. Accounts are deferred (§15).
 
+### 11.6 Development format
+
+*Decided:* creators work on an experience as a **folder of plain files**, and a tool packs the
+folder into a `.wb64`. Manifest, scenes and UI are **Lua tables**; scripts are sorted into
+folders by role; models carry their own settings in OBJ + MTL; scenes are trees of groups and parts.
+
+```
+course/                        tools/wb64.py course/  →  course.wb64
+  experience.lua               manifest
+  scenes/course.lua            one file per scene
+  scripts/server/main.lua      session server script; other files here are server modules
+  scripts/client/main.lua      each player's client script; other files here are client modules
+  scripts/shared/*.lua         modules both sides can require
+  ui/*.lua                     UI layouts (§14)
+  models/crate.obj, crate.mtl
+  textures/crate.png
+  music/*.xm, sounds/*.wav
+```
+
+**Names are paths.** *Decided.* An asset or scene is named by its path within its folder,
+without the extension: `models/crate.obj` is `"crate"`, `models/props/barrel.obj` is
+`"props/barrel"`. Nothing is declared twice. The packer assigns integer IDs; Lua and the
+network only ever see those IDs and names.
+
+**Data files are Lua tables.** *Decided.* Manifest, scene and UI files ship in the `.wb64`
+**unchanged**, and the console reads them with the Lua it already has, so there is no second
+parser to secure. *Proposed* rules:
+
+- Each file is one `return { … }` chunk, loaded as text only (never bytecode) into an empty
+  environment under the instruction limit (§7).
+- Allowed values: tables, strings, numbers and booleans. Functions are rejected, so data stays
+  plain and a future build mode can rewrite these files.
+- After loading, the C side checks every field, range, name and budget, as for any untrusted
+  input (§1.6), then copies the result into flat structs and lets the Lua tables be freed.
+- Lengths are in units and may have decimals (`1.5`); the loader rounds them to thousandths.
+  Colours are `{r, g, b}`, 0–255. Rotation is in degrees, a multiple of 45, about the vertical
+  axis (§5).
+
+```lua
+-- experience.lua
+return {
+    id = "hangout64.course",   -- stable forever; saves are keyed by it (§11.4)
+    title = "Obstacle Course",
+    version = 3,               -- this experience's own version, bumped on each release
+    api = 1,                   -- Lua API version it needs (§12)
+    players = 4,               -- 1 = single player
+    start = "course",          -- scenes/course.lua
+    icon = "icon",             -- textures/icon.png
+}
+```
+
+```lua
+-- scenes/course.lua
+return {
+    sky = {120, 170, 230}, fog = {120, 170, 230}, draw_distance = 60, kill_y = -20,
+    script = "course",         -- optional: scripts/server/course.lua runs while this scene is loaded
+
+    {name = "baseplate", pos = {0, -0.5, 0}, size = {40, 1, 40}, color = {90, 150, 90}, material = "grass"},
+    {name = "spawn", kind = "spawn", pos = {0, 0, 4}, size = {2, 0.2, 2}},
+    {name = "stairs", pos = {0, 0, -6}, rot = 45,                    -- a group: no size
+        {pos = {0, 0.3, 2},  size = {2, 0.6, 2}, color = {196, 40, 28}},
+        {pos = {0, 0.6, 0},  size = {2, 1.2, 2}, color = {245, 205, 48}},
+        {pos = {0, 0.9, -2}, size = {2, 1.8, 2}, color = {75, 151, 75}, shape = "wedge"},
+    },
+    {name = "crate", pos = {2.5, 0.5, -1}, size = {1, 1, 1}, model = "crate"},
+}
+```
+
+**Scenes are trees.** *Decided.* A node with a `size` is a part; a node without one is a
+**group**, and its list entries are its children. *Proposed:*
+
+- A group's `pos` and `rot` apply to everything inside it. Scripts can find, move, show and
+  hide a group as one.
+- Part fields: `name`, `kind` (`"part"` or `"spawn"`), `shape` (`"block"` or `"wedge"`),
+  `pos`, `size`, `rot`, `color`, `material`, `model`, `collides` (default true), `transparency`.
+  Everything except `pos` and `size` is optional.
+- Names are optional and don't have to be unique; scripts look nodes up by path
+  (`"stairs/top"`) or by search.
+- In memory the tree is a flat array of nodes, each with its parent's index (§4: plain data, no
+  pointers), so it can be snapshotted and sent.
+- Placing a child under a turned group rounds its world position to the nearest thousandth,
+  using the integer sin/cos tables, so every platform gets the same result.
+
+**Scripts are sorted by role.** *Decided.* Server scripts are in `scripts/server/`, client
+scripts in `scripts/client/`, shared modules in `scripts/shared/`. *Proposed:*
+
+- `server/main.lua` runs once per session; `client/main.lua` runs once per player. A scene's
+  `script` adds a server script that runs while that scene is loaded.
+- `require "util"` looks in the script's own role folder first, then in `shared/`. A client
+  script can never load a server module, so server-only logic and secrets stay on the host
+  once networking arrives.
+
+**Models are OBJ + MTL.** *Decided.* A model is exported at its real size in units (Z-up, front
+facing -Y, as today). The `.mtl` supplies each material's colour (`Kd`) and texture (`map_Kd`,
+resolved by file name from `textures/`). *Proposed:* the model is centred on X/Z with its base
+at the part's bottom, as today; named objects (`o`/`g`) are its sub-objects, and `collision` /
+`col_*` objects are its collision shapes (§9.1).
+
+**Packing.** *Proposed:* `tools/wb64.py <folder> [-o file.wb64]` (Python standard library only)
+copies the logic files byte for byte and converts assets to their canonical forms and variants
+(§9). It runs the same checks the console will (references, budgets, rotation steps, texture
+colours) and reports each problem with its file and line. The console checks everything again
+on load.
+
+**Running without packing.** *Proposed:* the PC build can run an experience folder directly and
+reload it when a file changes, with strict mode (§13) on, so creators can iterate without packing.
+
 ## 12. Versioning
 
 *Decided:* engine versioning is important.
@@ -467,7 +574,7 @@ screen, and DS/3DS touch can tap its keys.
 |---|---|
 | Physics (unanchored parts) | Deferred. Parts are anchored or scripted for now. |
 | Accounts | Deferred. Required for chat when they exist. |
-| Building experiences | Manual for now (hand-written data + tools). An in-engine build mode comes later. |
+| Building experiences | Manual for now: a hand-written experience folder (§11.6) packed by a tool. An in-engine build mode comes later. |
 | Networking | Deferred. The server-controlled idea (§10) is kept in mind, not designed. |
 | N64 caching and networking specifics | Deferred until N64 networking is in focus. |
 | Terrain (heightmaps, voxels) | Rejected: the world is parts only. |
@@ -520,7 +627,7 @@ What it means:
 Settled since the first draft: `.wb64`; 30 Hz tick; smooth animation with collision that follows
 it; rotation about the vertical axis only; the six-button virtual controller with combinations;
 script errors return to the hub; no Expansion Pak (N64 budgets assume 4 MB); networking deferred;
-Lua's cost measured (§16).
+Lua's cost measured (§16); the development format (§11.6).
 
 ## Current prototype vs this spec
 
@@ -531,7 +638,7 @@ What hangout64 already has, and what changes:
 | Platforms, CI | All six build in Docker/CI, releases on tags | Keep |
 | Maths | Integer core, `isin`/`icos` | Keep |
 | World | Fixed 20×20 floor + up to 256 unrotated box parts | Parts only, baseplate as a part, wedges, 45° rotation, scene settings |
-| Content | `HG64` place file (TEXR/MESH/PART chunks), built-in place | `.wb64` with logic + canonical/variant assets, scenes, versions |
+| Content | `assets/scene/course.json` packed into an `HG64` place file (TEXR/MESH/PART chunks), built in | An experience folder (§11.6) packed into a `.wb64`: Lua-table logic shipped as-is, plus canonical/variant assets |
 | Assets | OBJ models, 16-colour PNG textures converted on load | Canonical forms + tool-made variants; collision in models |
 | Rendering | Each `main.c` draws the level itself | Core draw list; ports render it their own way |
 | Timing | Fixed 30 Hz tick on every platform (`ticker_due` in the core); drawn at display rate without interpolation | Keep; interpolate where a port can afford it |
@@ -544,7 +651,7 @@ Suggested order of work:
 1. ~~Fixed tick everywhere~~ (done), and a headless core with replay and state-hash tests.
 2. ~~Lua on N64 and DS: measure cost; settle the script budget and number types.~~ Done (§16).
 3. The draw list and platform layer, starting with PC, then N64.
-4. `.wb64` with sessions and scenes, replacing the place file.
+4. The experience folder (§11.6) and `.wb64` with sessions and scenes, replacing the place file.
 5. Parts: baseplate, wedges, 45° rotation and collision.
 6. UI, the fixed font and the keyboard.
 7. Audio.
