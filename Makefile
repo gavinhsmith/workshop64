@@ -1,5 +1,6 @@
-# Local builds use the same toolchain images as CI.
-IMAGE_n64 := ghcr.io/dragonminded/libdragon:preview
+# Local builds use the same toolchain images as CI. The N64 one is built here from
+# platform/n64/Dockerfile (libdragon no longer publishes a public image).
+IMAGE_n64 := hangout64-n64
 IMAGE_ogc := devkitpro/devkitppc:latest
 IMAGE_nds := devkitpro/devkitarm:latest
 IMAGE_3ds := devkitpro/devkitarm:latest
@@ -8,10 +9,6 @@ IMAGE_web := emscripten/emsdk:latest
 # Built in Docker; web isn't a console but builds the same way.
 CONSOLES := n64 ogc nds 3ds web
 
-# Keep the N64 toolchain (with libdragon installed into it) in a named volume, so
-# libdragon is only built once. `make n64-reset` drops it, e.g. after an image update.
-N64_VOLUME := hangout64-n64-toolchain
-DOCKER_ARGS_n64 := -v $(N64_VOLUME):/n64_toolchain
 # Emscripten builds its SDL3 port into its cache; keep it so that only happens once.
 DOCKER_ARGS_web := -v hangout64-emsdk-cache:/emsdk/upstream/emscripten/cache
 
@@ -33,6 +30,11 @@ pc:
 	cmake -S platform/pc -B build/cmake $(CMAKE_ARGS)
 	cmake --build build/cmake
 
+# Docker caches the image, so this is quick after the first time.
+n64-image:
+	docker build -t $(IMAGE_n64) platform/n64
+n64 clean: n64-image
+
 $(CONSOLES):
 	docker run --rm $(DOCKER_ARGS_$@) -v "$(CURDIR):/src" -w /src/platform/$@ $(IMAGE_$@) make
 
@@ -40,7 +42,8 @@ clean:
 	rm -rf build core/test_core
 	$(foreach c,$(CONSOLES),docker run --rm $(DOCKER_ARGS_$(c)) -v "$(CURDIR):/src" -w /src/platform/$(c) $(IMAGE_$(c)) make clean;)
 
+# Rebuild the N64 image from scratch, picking up the latest toolchain and libdragon.
 n64-reset:
-	docker volume rm $(N64_VOLUME)
+	docker build --no-cache -t $(IMAGE_n64) platform/n64
 
-.PHONY: all test pc clean n64-reset $(CONSOLES)
+.PHONY: all test pc clean n64-image n64-reset $(CONSOLES)

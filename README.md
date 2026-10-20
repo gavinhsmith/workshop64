@@ -59,7 +59,7 @@ make nds
 make 3ds
 make web    # also in Docker
 make        # everything
-make n64-reset  # drop the cached N64 toolchain + libdragon volume (e.g. after an image update)
+make n64-reset  # rebuild the N64 image (platform/n64/Dockerfile) with the latest toolchain + libdragon
 ```
 
 Finished files go to `build/<platform>/` (see the table above).

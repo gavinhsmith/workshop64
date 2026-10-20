@@ -26,13 +26,6 @@ $(BUILD_DIR)/core/%.o: $(GEN)/%.c $(CORE_HDR)
 $(BUILD_DIR)/hangout64.elf: $(BUILD_DIR)/main.o $(addprefix $(BUILD_DIR)/core/,$(CORE_OBJ))
 hangout64.z64: N64_ROM_TITLE = "hangout64"
 
-# The libdragon image ships only the toolchain. If libdragon isn't installed yet,
-# make builds this include first (preview branch) and restarts.
-$(N64_INST)/include/n64.mk:
-	rm -rf /tmp/libdragon
-	git clone --depth 1 --branch preview https://github.com/DragonMinded/libdragon /tmp/libdragon
-	$(MAKE) -C /tmp/libdragon -j$$(nproc) install tools-install
-
 clean:
 	rm -rf $(BUILD_DIR) *.z64 $(OUT)
 

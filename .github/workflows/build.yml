@@ -24,7 +24,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { platform: n64, image: 'ghcr.io/dragonminded/libdragon:preview', out: 'build/n64/' }
           - { platform: ogc, image: 'devkitpro/devkitppc:latest', out: 'build/ogc/' }
           - { platform: nds, image: 'devkitpro/devkitarm:latest', out: 'build/nds/' }
           - { platform: 3ds, image: 'devkitpro/devkitarm:latest', out: 'build/3ds/' }
@@ -39,6 +38,22 @@ jobs:
         with:
           name: ${{ matrix.platform }}
           path: ${{ matrix.out }}
+          if-no-files-found: error
+
+  # libdragon no longer publishes a public image, so this builds ours (platform/n64/Dockerfile)
+  # the same way `make n64` does locally.
+  n64:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - run: make n64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: n64
+          path: build/n64/
           if-no-files-found: error
 
   pc:
@@ -71,7 +86,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [console, pc]
+    needs: [console, n64, pc]
     runs-on: ubuntu-latest
     permissions:
       contents: write
