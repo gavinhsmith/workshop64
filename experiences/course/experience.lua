@@ -1,5 +1,5 @@
 return {
-    id = "hangout64.course",
+    id = "workshop64.course",
     title = "Obstacle Course",
     version = 1,
     api = 1,

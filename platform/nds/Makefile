@@ -3,9 +3,10 @@ $(error DEVKITARM is not set; use the devkitpro/devkitarm container)
 endif
 
 # Read by ds_rules' %.nds rule; must be set before the include.
-GAME_TITLE     := hangout64
+GAME_TITLE     := workshop64
 GAME_SUBTITLE1 := 3D homebrew demo
-GAME_SUBTITLE2 := github.com/gavinhsmith/hangout64
+GAME_SUBTITLE2 := github.com/gavinhsmith/workshop64
+GAME_ICON      := $(CURDIR)/../../assets/icon/ds.bmp # made from icon.svg by tools/authoring/icons.py
 
 # Captured by ds_rules' %.elf rule at include time.
 LIBPATHS := -L$(DEVKITPRO)/libnds/lib
@@ -13,7 +14,7 @@ LIBPATHS := -L$(DEVKITPRO)/libnds/lib
 include $(DEVKITARM)/ds_rules
 include ../../core/core.mk
 
-TARGET  := hangout64
+TARGET  := workshop64
 BUILD   := build
 OBJS    := $(BUILD)/main.o $(addprefix $(BUILD)/,$(CORE_OBJ))
 ARCH    := -march=armv5te -mtune=arm946e-s

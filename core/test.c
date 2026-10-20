@@ -23,7 +23,7 @@ static camera follow(camera c, unsigned buttons, const world *w, int ticks)
     return c;
 }
 
-/* Little-endian writers, and a .wb64 builder for hand-made and broken experiences. */
+/* Little-endian writers, and a .ws64 builder for hand-made and broken experiences. */
 static void wr16(uint8_t *p, unsigned v) { p[0] = v & 0xff; p[1] = v >> 8; }
 static void wr32(uint8_t *p, uint32_t v) { wr16(p, v & 0xffff); wr16(p + 2, v >> 16); }
 
@@ -43,8 +43,8 @@ static uint8_t *build(const test_entry *e, int n, size_t *size)
     for (int i = 0; i < n; i++)
         total += e[i].size;
     uint8_t *b = malloc(total), *p = b + 8;
-    memcpy(b, "WB64", 4);
-    wr16(b + 4, WB64_VERSION);
+    memcpy(b, "WS64", 4);
+    wr16(b + 4, WS64_VERSION);
     wr16(b + 6, n);
     for (int i = 0; i < n; i++) {
         size_t len = strlen(e[i].name);
@@ -161,7 +161,7 @@ static void test_experience_loader(void)
     b[0] = 'X';
     assert(load(b, builtin_experience_size) == PLACE_BAD_MAGIC);
     memcpy(b, builtin_experience, builtin_experience_size);
-    wr16(b + 4, WB64_VERSION + 1);
+    wr16(b + 4, WS64_VERSION + 1);
     assert(load(b, builtin_experience_size) == PLACE_BAD_VERSION);
 
     /* Bad references and values in assets. */

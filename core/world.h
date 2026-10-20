@@ -67,8 +67,8 @@ typedef struct {
     int mesh;       /* index into the place's meshes, or -1 for a plain box */
 } part;
 
-/* A place: the content of one scene, loaded from an experience (.wb64) so it can come from
- * the network later. Format: see tools/wb64.py. Everything is validated on load. */
+/* A place: the content of one scene, loaded from an experience (.ws64) so it can come from
+ * the network later. Format: see tools/ws64.py. Everything is validated on load. */
 typedef struct {
     part *parts;
     int part_count;
@@ -86,7 +86,7 @@ enum {
     PLACE_BAD_DATA,     /* a logic file (Lua) failed to load or has bad fields */
     PLACE_NEEDS_UPDATE, /* needs a newer Lua API than ENGINE_API */
 };
-#define WB64_VERSION 1 /* .wb64 format version */
+#define WS64_VERSION 1 /* .ws64 format version */
 #define ENGINE_API 1   /* Lua API version this engine provides (docs/engine.md section 12) */
 #define PLACE_MAX_PARTS 256
 #define PLACE_MAX_MESHES 32
@@ -94,7 +94,7 @@ enum {
 #define PLACE_MAX_TRIS 1400 /* floor + parts; leaves the DS's 2048 room for 4 avatars */
 #define PLACE_MAX_COORD 50000 /* positions and sizes; keeps 8.8 mesh coords in range */
 
-/* Load an experience (.wb64) from bytes into *pl: its models, textures and start scene.
+/* Load an experience (.ws64) from bytes into *pl: its models, textures and start scene.
  * On failure returns a PLACE_* error, leaves *pl empty and says what was wrong in
  * experience_error. */
 int experience_load(place *pl, const uint8_t *data, size_t size);

@@ -335,7 +335,7 @@ int main(int argc, char **argv)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
     /* Resizable: SDL then keeps the canvas's pixel size matching the page (see shell.html). */
-    win = SDL_CreateWindow("hangout64", SCREEN_W * 3, SCREEN_H * 3,
+    win = SDL_CreateWindow("workshop64", SCREEN_W * 3, SCREEN_H * 3,
                            SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!win || !SDL_GL_CreateContext(win)) {
         SDL_Log("window: %s", SDL_GetError());

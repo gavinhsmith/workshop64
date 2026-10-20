@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+  <name>workshop64</name>
+  <coder>gavinhsmith</coder>
+  <short_description>3D homebrew demo</short_description>
+  <long_description>A little cartoon figure walking around a course of parts to climb: the prototype for workshop64, a small Roblox-like platform. github.com/gavinhsmith/workshop64</long_description>
+</app>

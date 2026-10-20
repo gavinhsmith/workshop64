@@ -157,7 +157,7 @@ int main(void)
 {
     gfxInitDefault();
     consoleInit(GFX_BOTTOM, NULL);
-    printf("hangout64\n\nCircle pad: move\nA:          jump\nB:          run\nD-pad:      orbit\nL/R:        zoom\nX:          camera\nSTART:      exit\n");
+    printf("workshop64\n\nCircle pad: move\nA:          jump\nB:          run\nD-pad:      orbit\nL/R:        zoom\nX:          camera\nSTART:      exit\n");
 
     C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
     /* The top screen is physically rotated: its framebuffer is 240 wide, 400 tall. */

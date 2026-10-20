@@ -180,7 +180,7 @@ int main(int argc, char **argv)
         return 1;
     }
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-    SDL_Window *win = SDL_CreateWindow("hangout64", SCREEN_W * 3, SCREEN_H * 3,
+    SDL_Window *win = SDL_CreateWindow("workshop64", SCREEN_W * 3, SCREEN_H * 3,
                                        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!win || !SDL_GL_CreateContext(win)) {
         SDL_Log("window: %s", SDL_GetError());
@@ -188,6 +188,13 @@ int main(int argc, char **argv)
     }
     SDL_SetWindowMinimumSize(win, SCREEN_W, SCREEN_H);
     SDL_GL_SetSwapInterval(1);
+    extern const int app_icon_w, app_icon_h; /* assets/icon, built in by tools/icon2c.py */
+    extern const unsigned char app_icon[];
+    SDL_Surface *icon = SDL_CreateSurfaceFrom(app_icon_w, app_icon_h, SDL_PIXELFORMAT_RGBA32, (void *)app_icon, app_icon_w * 4);
+    if (icon) {
+        SDL_SetWindowIcon(win, icon);
+        SDL_DestroySurface(icon);
+    }
 
     GLuint tex;
     glGenTextures(1, &tex);

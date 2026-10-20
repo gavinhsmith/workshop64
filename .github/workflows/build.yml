@@ -97,8 +97,8 @@ jobs:
       - name: Zip each platform and publish
         working-directory: dist
         run: |
-          chmod +x pc-linux/hangout64 pc-macos/hangout64
-          for d in */; do (cd "$d" && zip -r "../hangout64-${d%/}.zip" .); done
+          chmod +x pc-linux/workshop64 pc-macos/workshop64
+          for d in */; do (cd "$d" && zip -r "../workshop64-${d%/}.zip" .); done
           gh release create "$GITHUB_REF_NAME" *.zip --repo "$GITHUB_REPOSITORY" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

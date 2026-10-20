@@ -9,7 +9,7 @@ GEN      := $(ROOT)/build/gen
 # python3, or python where python3 doesn't run (on Windows it's often the Store stub).
 PYTHON   ?= $(if $(shell python3 -c "print(1)" 2>/dev/null),python3,python)
 LUA      := $(ROOT)/third_party/lua
-CORE_SRC := world.c avatar.c wb64.c lua.c
+CORE_SRC := world.c avatar.c ws64.c lua.c
 GEN_SRC  := builtin_experience.c
 CORE_OBJ := $(CORE_SRC:.c=.o) $(GEN_SRC:.c=.o)
 CORE_HDR := $(GEN)/lua32.h
@@ -23,7 +23,7 @@ endif
 # A failed generator must not leave a half-written file that looks up to date.
 .DELETE_ON_ERROR:
 
-$(GEN)/builtin_experience.c: $(ROOT)/tools/wb64.py $(ROOT)/tools/objload.py $(ROOT)/tools/texload.py $(wildcard $(EXPERIENCE)/* $(EXPERIENCE)/*/* $(EXPERIENCE)/*/*/*)
+$(GEN)/builtin_experience.c: $(ROOT)/tools/ws64.py $(ROOT)/tools/objload.py $(ROOT)/tools/texload.py $(wildcard $(EXPERIENCE)/* $(EXPERIENCE)/*/* $(EXPERIENCE)/*/*/*)
 	@mkdir -p $(dir $@)
 	$(PYTHON) $< $(EXPERIENCE) $@ builtin_experience
 

@@ -12,7 +12,10 @@ OBJS    := $(BUILD)/main.o $(addprefix $(BUILD)/,$(CORE_OBJ))
 CFLAGS  := -O2 -Wall --use-port=sdl3 $(CORE_INC) -MMD -MP
 LDFLAGS := --use-port=sdl3 -sALLOW_MEMORY_GROWTH --shell-file shell.html
 
-all: $(OUT)/index.html
+all: $(OUT)/index.html $(OUT)/icon.svg
+
+$(OUT)/icon.svg: $(ROOT)/icon.svg | $(OUT)
+	cp $< $@
 
 $(OUT)/index.html: $(OBJS) shell.html | $(OUT)
 	$(CC) $(OBJS) $(LDFLAGS) -o $@

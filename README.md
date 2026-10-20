@@ -1,22 +1,22 @@
-# hangout64
+# workshop64
 Multi-platform demo for a simple 3D homebrew title for Nintendo 64 and beyond.
 
 Currently a little cartoon figure walking around a checkered floor with a few parts to climb, rendered 240 lines high everywhere (DS: native 256x192) and scaled up; wider screens show a wider view (3DS, Wii in 16:9, PC and web at any window shape).
 
-This is the prototype for **workbench64**, a small Roblox-like platform; see the
+This is the prototype for **workshop64**, a small Roblox-like platform; see the
 [engine specification](docs/engine.md) for where it's going.
 
 | Folder | Platform | Library | Output |
 |---|---|---|---|
 | `core/` | shared game code (no platform headers) | — | — |
-| `platform/n64/` | Nintendo 64 | libdragon (preview, OpenGL) | `build/n64/hangout64.z64` |
-| `platform/ogc/` | GameCube + Wii | libogc (GX) | `build/ogc/hangout64_gamecube.dol`, `_wii.dol` |
-| `platform/nds/` | DS | libnds | `build/nds/hangout64.nds` |
-| `platform/3ds/` | 3DS | libctru + citro3d | `build/3ds/hangout64.3dsx` |
-| `platform/pc/` | Windows / Linux / macOS | SDL3 + OpenGL | `build/pc/hangout64` |
+| `platform/n64/` | Nintendo 64 | libdragon (preview, OpenGL) | `build/n64/workshop64.z64` |
+| `platform/ogc/` | GameCube + Wii | libogc (GX) | `build/ogc/workshop64_gamecube.dol`, `_wii.dol` |
+| `platform/nds/` | DS | libnds | `build/nds/workshop64.nds` |
+| `platform/3ds/` | 3DS | libctru + citro3d | `build/3ds/workshop64.3dsx` |
+| `platform/pc/` | Windows / Linux / macOS | SDL3 + OpenGL | `build/pc/workshop64` |
 | `platform/web/` | browsers | Emscripten, SDL3 + WebGL | `build/web/` (html + js + wasm) |
 
-`tools/` holds the scripts the build runs.
+`tools/` holds the scripts the build runs; `tools/authoring/` holds ones you run by hand.
 
 ## Controls
 
@@ -78,7 +78,8 @@ Finished files go to `build/<platform>/` (see the table above).
 ## Running
 
 - N64: ares, or a flashcart (SummerCart64, EverDrive)
-- GameCube/Wii: Dolphin; on hardware via Swiss (GC) or the Homebrew Channel / `wiiload` (Wii)
+- GameCube/Wii: Dolphin; on hardware via Swiss (GC) or the Homebrew Channel (copy
+  `build/ogc/apps/` to the SD card) / `wiiload` (Wii)
 - DS: melonDS 1.0+, or a flashcart. DeSmuME 0.9.13 shows white screens for anything built with libnds 2 / calico.
 - 3DS: Azahar, or the Homebrew Launcher / `3dslink`
 - Web: serve `build/web/` over HTTP (browsers won't load wasm from `file://`), e.g.
@@ -87,7 +88,7 @@ Finished files go to `build/<platform>/` (see the table above).
 ## Experiences
 
 An experience is a folder of plain files (see [the spec, section 11.6](docs/engine.md#116-development-format)),
-packed into one `.wb64` file that is loaded and validated at runtime by `core/wb64.c`, so it
+packed into one `.ws64` file that is loaded and validated at runtime by `core/ws64.c`, so it
 can be delivered over the network later. The built-in experience is `experiences/course/`,
 packed into C by the build:
 
@@ -102,12 +103,12 @@ experiences/course/
 To pack one by hand:
 
 ```sh
-python3 tools/wb64.py experiences/course course.wb64
+python3 tools/ws64.py experiences/course course.ws64
 ```
 
 The packer converts models and textures and copies the Lua files as they are; the engine
 checks those when it loads them (any mistake names the file and part), so run the result in
-the PC build or `make test`. The format is described at the top of `tools/wb64.py`. Budgets
+the PC build or `make test`. The format is described at the top of `tools/ws64.py`. Budgets
 (parts, models, textures, triangles) are in `core/world.h` and are sized for the weakest
 console. Textures are PNGs with at most 16 colours, up to 32 px per side (32x32 fits the N64's
 texture memory), padded to a power of two if needed; they are drawn nearest-filtered and
@@ -121,6 +122,11 @@ knees. The face is a 16x16 texture drawn as ASCII art in the source. Each
 player's dress and sleeves wear their coat colour. Its animations (idle,
 walk, run, jump, fall) are poses computed each tick from what the player is doing; when the
 animation changes, the pose eases from the old one over 0.2 s.
+
+The icon is `icon.svg`. `tools/authoring/icons.py` (needs `rsvg-convert`) renders it into
+`assets/icon/` for each build: the PC window and Windows `.exe`, the DS and 3DS menus, the
+Wii's Homebrew Channel and the web page's tab. Run it after changing the SVG and commit the
+results. The N64 and GameCube formats have no icon.
 
 Models are OBJ files exported Z-up with the front facing -Y (as from OwlCAD).
 

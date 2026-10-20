@@ -1,10 +1,10 @@
-# workbench64 engine specification
+# workshop64 engine specification
 
-workbench64 is a small, Roblox-like platform (not a recreation) for the Nintendo 64, GameCube,
+workshop64 is a small, Roblox-like platform (not a recreation) for the Nintendo 64, GameCube,
 Wii, DS, 3DS, PC and the web. People play **experiences**: worlds built from parts, controlled by Lua,
 with their own models, textures, music and UI, played alone or together over the network.
 
-This repository (hangout64) is the prototype that informed this spec. The spec describes where
+This repository holds the prototype that informed this spec. The spec describes where
 the engine is going; the [last section](#current-prototype-vs-this-spec) says what exists today.
 
 Each item is marked:
@@ -31,8 +31,8 @@ Each item is marked:
    the same vertical view, so wider screens see more to the sides. Wider screens add columns, never
    fewer lines. The Wii follows its 4:3 / 16:9 setting (428 columns in 16:9).
 5. **The engine is not a general game engine.** *Decided.* No standalone export: experiences run
-   inside workbench64, never as their own ROM or executable.
-6. **Untrusted content is validated on load.** *Decided.* Every `.wb64`, whatever its source, is
+   inside workshop64, never as their own ROM or executable.
+6. **Untrusted content is validated on load.** *Decided.* Every `.ws64`, whatever its source, is
    bounds-checked before use, and scripts run in a sandbox.
 7. **Versions are explicit.** *Decided.* Engine, Lua API and file format each carry a version (§12).
 
@@ -40,7 +40,7 @@ Each item is marked:
 
 | Term | Meaning |
 |---|---|
-| Experience | A game made for workbench64, distributed as one `.wb64` file. |
+| Experience | A game made for workshop64, distributed as one `.ws64` file. |
 | Session (lobby) | A running instance of an experience: its players, shared state, and the scenes loaded for it. |
 | Scene | One world within an experience: parts, models and the assets they use. A session can hold any number. |
 | Part | The building block of every world (§5). |
@@ -57,7 +57,7 @@ Each item is marked:
 ```
            ┌──────────── core (portable C, integer) ────────────┐
 input ───▶ │ simulation · collision · Lua runtime · UI layout   │ ───▶ draw list, UI list, audio events
-           │ .wb64 loader · session/scene management · net code │
+           │ .ws64 loader · session/scene management · net code │
            └────────────────────────────────────────────────────┘
                                    ▲  ▼
            ┌──────────── platform layer (per port) ─────────────┐
@@ -141,7 +141,7 @@ Lua controls the world. *Decided.*
 
 - **Lua 5.4**, built with `LUA_32BITS` (32-bit integers and floats). *Proposed, measured (§16):*
   it fits easily in memory and is 10–20% faster on N64 than the default 64-bit build.
-- Scripts ship as source in the `.wb64` and are compiled on the console when a scene loads, at
+- Scripts ship as source in the `.ws64` and are compiled on the console when a scene loads, at
   about 5–8 ms per KB of source on N64 and DS (a 20 KB experience: 0.1–0.2 s). Lua bytecode is
   never loaded from files: it isn't portable and the VM doesn't verify it. Caching compiled
   scripts isn't needed at that speed.
@@ -292,13 +292,13 @@ design don't rule it out.
 
 ## 11. Content and distribution
 
-### 11.1 The `.wb64` file
+### 11.1 The `.ws64` file
 
-*Decided:* one experience is one file, `<experience>.wb64`, holding everything for every platform.
+*Decided:* one experience is one file, `<experience>.ws64`, holding everything for every platform.
 
 ```
-experience.wb64
-  header   magic "WB64", format version, experience id + version, required API version, content hash
+experience.ws64
+  header   magic "WS64", format version, experience id + version, required API version, content hash
   index    [entry: kind, asset id, variant (canonical | n64 | gx | ds | 3ds), scene mask, offset, size, flags, hash]
   logic    manifest, scenes (part trees, settings), UI layouts, Lua source   — one copy, run on the host
   assets   canonical blobs + optional variant blobs
@@ -319,7 +319,7 @@ experience.wb64
 
 ### 11.2 Sources
 
-The loader doesn't care where a `.wb64` came from. *Decided.*
+The loader doesn't care where a `.ws64` came from. *Decided.*
 
 | Source | Use |
 |---|---|
@@ -339,14 +339,14 @@ The loader doesn't care where a `.wb64` came from. *Decided.*
 - **Background downloads.** *Decided:* may continue while playing if the budgets allow, at a reduced
   rate so gameplay keeps its bandwidth; full speed in the lobby or while loading.
 - **Caching.** *Decided:* the program caches experiences. A finished download is stored as an
-  ordinary `.wb64` (with only that platform's variants) and can be played offline.
+  ordinary `.ws64` (with only that platform's variants) and can be played offline.
   *Proposed:* least-recently-played eviction with a size cap per platform.
 - **N64:** *Decided:* no cache for now; revisit when N64 networking is in focus.
 
 ### 11.4 Saves
 
 *Proposed.* A small key-value store per experience through the Lua API, keyed by experience ID and
-stored next to it, never inside the `.wb64`, so updates can't wipe progress. Saves carry the
+stored next to it, never inside the `.ws64`, so updates can't wipe progress. Saves carry the
 experience version so an update can migrate them. Limits must fit the smallest storage: the N64
 Controller Pak holds 32 KB total, so about 1–2 KB per experience there.
 
@@ -359,11 +359,11 @@ receive only filtered messages, and only if they ask for chat access. Accounts a
 ### 11.6 Development format
 
 *Decided:* creators work on an experience as a **folder of plain files**, and a tool packs the
-folder into a `.wb64`. Manifest, scenes and UI are **Lua tables**; scripts are sorted into
+folder into a `.ws64`. Manifest, scenes and UI are **Lua tables**; scripts are sorted into
 folders by role; models carry their own settings in OBJ + MTL; scenes are trees of groups and parts.
 
 ```
-course/                        tools/wb64.py course/  →  course.wb64
+course/                        tools/ws64.py course/  →  course.ws64
   experience.lua               manifest
   scenes/course.lua            one file per scene
   scripts/server/main.lua      session server script; other files here are server modules
@@ -380,7 +380,7 @@ without the extension: `models/crate.obj` is `"crate"`, `models/props/barrel.obj
 `"props/barrel"`. Nothing is declared twice. The packer assigns integer IDs; Lua and the
 network only ever see those IDs and names.
 
-**Data files are Lua tables.** *Decided.* Manifest, scene and UI files ship in the `.wb64`
+**Data files are Lua tables.** *Decided.* Manifest, scene and UI files ship in the `.ws64`
 **unchanged**, and the console reads them with the Lua it already has, so there is no second
 parser to secure. *Proposed* rules:
 
@@ -397,7 +397,7 @@ parser to secure. *Proposed* rules:
 ```lua
 -- experience.lua
 return {
-    id = "hangout64.course",   -- stable forever; saves are keyed by it (§11.4)
+    id = "workshop64.course",   -- stable forever; saves are keyed by it (§11.4)
     title = "Obstacle Course",
     version = 3,               -- this experience's own version, bumped on each release
     api = 1,                   -- Lua API version it needs (§12)
@@ -455,7 +455,7 @@ resolved by file name from `textures/`). *Proposed:* the model is centred on X/Z
 at the part's bottom, as today; named objects (`o`/`g`) are its sub-objects, and `collision` /
 `col_*` objects are its collision shapes (§9.1).
 
-**Packing.** *Decided:* `tools/wb64.py <folder> <file.wb64>` (Python standard library only)
+**Packing.** *Decided:* `tools/ws64.py <folder> <file.ws64>` (Python standard library only)
 copies the logic files byte for byte and converts assets to their canonical forms (and later
 variants, §9), checking the assets as it goes. It doesn't read the Lua files: the engine's own
 loader is the one place logic is checked, so there is no second implementation to drift. Run the
@@ -471,10 +471,10 @@ reload it when a file changes, with strict mode (§13) on, so creators can itera
 *Decided:* engine versioning is important.
 
 - **Engine version:** the program. Players in one session must run the same engine version.
-- **API version:** the Lua API. A `.wb64` declares the API version it needs; an older engine refuses
+- **API version:** the Lua API. A `.ws64` declares the API version it needs; an older engine refuses
   it with "update required" instead of half-loading. The API only adds; nothing is removed or
   changed in place.
-- **Format version:** the `.wb64` layout. Unknown index entry kinds are skipped, so new asset kinds
+- **Format version:** the `.ws64` layout. Unknown index entry kinds are skipped, so new asset kinds
   don't break older readers.
 - Updating the engine on N64 means a new ROM, so updates are rare: a stable API matters more
   than speed of change.
@@ -495,7 +495,7 @@ DS and N64 hardware before they're fixed:
 | Collision shapes per model | collision cost | ~8 |
 | Audio | DS channels, N64 software mixing | ~8 voices |
 | UI quads and glyphs | fill rate | to measure |
-| `.wb64` download per scene | N64 RAM and link speed | ~256 KB per platform |
+| `.ws64` download per scene | N64 RAM and link speed | ~256 KB per platform |
 | Save data | N64 Controller Pak | 1–2 KB per experience |
 
 The cost of the avatar matters: avatars get at most 160 triangles each (today's has 146), so four
@@ -504,7 +504,7 @@ fit in what the DS's 2048 leaves beside a full 1400-triangle scene.
 **Strict mode on PC.** *Proposed:* the PC build can enforce every budget live (memory caps,
 instruction limits, triangle and texture counts, the 256×192 UI safe area) and report breaches
 as N64 or DS would hit them, so testing on PC in strict mode means it works everywhere. CI can run
-the same checks on every `.wb64`.
+the same checks on every `.ws64`.
 
 ## 14. UI and text
 
@@ -596,7 +596,7 @@ screen, and DS/3DS touch can tap its keys.
 | Networking | Deferred. The server-controlled idea (§10) is kept in mind, not designed. |
 | N64 caching and networking specifics | Deferred until N64 networking is in focus. |
 | Terrain (heightmaps, voxels) | Rejected: the world is parts only. |
-| Standalone export | Rejected: workbench64 isn't a general game engine. |
+| Standalone export | Rejected: workshop64 isn't a general game engine. |
 | Native system keyboards | Not used, to keep one look. |
 | Skeletal animation, dynamic lighting | Out of scope. |
 
@@ -642,21 +642,21 @@ What it means:
 
 1. **Lua on hardware:** confirm the §16 numbers on a real N64 and DS.
 
-Settled since the first draft: `.wb64`; 30 Hz tick; smooth animation with collision that follows
+Settled since the first draft: `.ws64`; 30 Hz tick; smooth animation with collision that follows
 it; rotation about the vertical axis only; the six-button virtual controller with combinations;
 script errors return to the hub; no Expansion Pak (N64 budgets assume 4 MB); networking deferred;
 Lua's cost measured (§16); the development format (§11.6).
 
 ## Current prototype vs this spec
 
-What hangout64 already has, and what changes:
+What the prototype already has, and what changes:
 
 | Area | Prototype today | Spec |
 |---|---|---|
 | Platforms, CI | All seven (with the web) build in Docker/CI, releases on tags | Keep |
 | Maths | Integer core, `isin`/`icos` | Keep |
 | World | Fixed 20×20 floor + up to 256 unrotated box parts | Parts only, baseplate as a part, wedges, 45° rotation, scene settings |
-| Content | `experiences/course/` (§11.6) packed into a `.wb64` with logic, canonical textures and models; built in. Scenes take parts, groups and a fixed camera spot (no rotation, wedges or other scene settings yet); one scene per experience | Variants, sessions with several scenes, the rest of §11.6 |
+| Content | `experiences/course/` (§11.6) packed into a `.ws64` with logic, canonical textures and models; built in. Scenes take parts, groups and a fixed camera spot (no rotation, wedges or other scene settings yet); one scene per experience | Variants, sessions with several scenes, the rest of §11.6 |
 | Assets | OBJ models, 16-colour PNG textures converted on load | Canonical forms + tool-made variants; collision in models |
 | Rendering | Each `main.c` draws the level itself | Core draw list; ports render it their own way |
 | Timing | Fixed 30 Hz tick on every platform (`ticker_due` in the core); drawn at display rate without interpolation | Keep; interpolate where a port can afford it |
@@ -669,7 +669,7 @@ Suggested order of work:
 1. ~~Fixed tick everywhere~~ (done), and a headless core with replay and state-hash tests.
 2. ~~Lua on N64 and DS: measure cost; settle the script budget and number types.~~ Done (§16).
 3. The draw list and platform layer, starting with PC, then N64.
-4. The experience folder (§11.6) and `.wb64` with sessions and scenes, replacing the place file.
+4. The experience folder (§11.6) and `.ws64` with sessions and scenes, replacing the place file.
 5. Parts: baseplate, wedges, 45° rotation and collision.
 6. UI, the fixed font and the keyboard.
 7. Audio.

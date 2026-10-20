@@ -1,6 +1,6 @@
 # Local builds use the same toolchain images as CI. The N64 one is built here from
 # platform/n64/Dockerfile (libdragon no longer publishes a public image).
-IMAGE_n64 := hangout64-n64
+IMAGE_n64 := workshop64-n64
 IMAGE_ogc := devkitpro/devkitppc:latest
 IMAGE_nds := devkitpro/devkitarm:latest
 IMAGE_3ds := devkitpro/devkitarm:latest
@@ -10,7 +10,7 @@ IMAGE_web := emscripten/emsdk:latest
 CONSOLES := n64 ogc nds 3ds web
 
 # Emscripten builds its SDL3 port into its cache; keep it so that only happens once.
-DOCKER_ARGS_web := -v hangout64-emsdk-cache:/emsdk/upstream/emscripten/cache
+DOCKER_ARGS_web := -v workshop64-emsdk-cache:/emsdk/upstream/emscripten/cache
 
 # Stop Git Bash on Windows rewriting the container paths (/src/...) into Windows paths.
 export MSYS_NO_PATHCONV := 1
@@ -26,7 +26,10 @@ test:
 ifeq ($(OS),Windows_NT)
 CMAKE_ARGS ?= -G "MinGW Makefiles" -DCMAKE_MAKE_PROGRAM="$(MAKE)"
 endif
+# CMake refuses a cache made for another folder (the repo moved or was renamed): start fresh.
 pc:
+	@if [ -f build/cmake/CMakeCache.txt ] && ! grep -q "CMAKE_HOME_DIRECTORY:INTERNAL=$(CURDIR)/platform/pc$$" build/cmake/CMakeCache.txt; then \
+		echo "build/cmake was made for another folder; starting it again"; rm -rf build/cmake; fi
 	cmake -S platform/pc -B build/cmake $(CMAKE_ARGS)
 	cmake --build build/cmake
 

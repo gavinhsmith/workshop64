@@ -5,7 +5,7 @@ endif
 include $(DEVKITARM)/3ds_rules
 include ../../core/core.mk
 
-TARGET  := hangout64
+TARGET  := workshop64
 BUILD   := build
 OBJS    := $(BUILD)/vshader.shbin.o $(BUILD)/main.o $(addprefix $(BUILD)/,$(CORE_OBJ))
 ARCH    := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
@@ -17,9 +17,12 @@ OUT     := $(ROOT)/build/3ds
 
 all: $(OUT)/$(TARGET).3dsx
 
-$(OUT)/$(TARGET).3dsx: $(BUILD)/$(TARGET).elf
+$(BUILD)/$(TARGET).smdh: $(ROOT)/assets/icon/icon-48.png | $(BUILD)
+	smdhtool --create "workshop64" "3D homebrew demo" "github.com/gavinhsmith/workshop64" $< $@
+
+$(OUT)/$(TARGET).3dsx: $(BUILD)/$(TARGET).elf $(BUILD)/$(TARGET).smdh
 	@mkdir -p $(dir $@)
-	3dsxtool $< $@
+	3dsxtool $< $@ --smdh=$(BUILD)/$(TARGET).smdh
 
 $(BUILD)/$(TARGET).elf: $(OBJS)
 	$(CC) $(LDFLAGS) $^ $(LIBS) -o $@

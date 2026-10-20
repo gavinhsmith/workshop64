@@ -103,7 +103,7 @@ int main(void)
 {
     videoSetMode(MODE_0_3D);
     consoleDemoInit(); /* text console on the bottom screen */
-    printf("hangout64\n\nD-pad:     move\nA:         jump\nB:         run\nR + D-pad: orbit\nX/Y:       zoom\nL:         camera\nSTART:     exit\n");
+    printf("workshop64\n\nD-pad:     move\nA:         jump\nB:         run\nR + D-pad: orbit\nX/Y:       zoom\nL:         camera\nSTART:     exit\n");
     glInit();
     glClearColor(3, 3, 5, 31);
     glClearPolyID(63);

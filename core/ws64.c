@@ -1,6 +1,6 @@
 /* Experience loader. Input may come from anywhere (eventually the network), so every length,
  * count, index and value is checked before use; on any error the place is freed and left
- * empty. Format: see tools/wb64.py; the logic files are Lua tables (docs/engine.md 11.6),
+ * empty. Format: see tools/ws64.py; the logic files are Lua tables (docs/engine.md 11.6),
  * read in a Lua state with no libraries and capped memory and instructions. */
 #include <stdarg.h>
 #include <stdio.h>
@@ -65,10 +65,10 @@ void place_free(place *pl)
 /* The index: every entry's name and blob within the file. */
 static int read_index(const uint8_t *data, size_t size, entry **out, int *count)
 {
-    if (size < 8 || memcmp(data, "WB64", 4) != 0)
-        return fail(PLACE_BAD_MAGIC, "not a .wb64 file");
-    if (rd16(data + 4) != WB64_VERSION)
-        return fail(PLACE_BAD_VERSION, "unsupported .wb64 format version");
+    if (size < 8 || memcmp(data, "WS64", 4) != 0)
+        return fail(PLACE_BAD_MAGIC, "not a .ws64 file");
+    if (rd16(data + 4) != WS64_VERSION)
+        return fail(PLACE_BAD_VERSION, "unsupported .ws64 format version");
     unsigned n = rd16(data + 6);
     if (n > MAX_ENTRIES)
         return fail(PLACE_OVER_BUDGET, "too many entries");
@@ -449,7 +449,7 @@ static int read_logic(lua_State *L)
     check_keys(L, ld, m, manifest_keys, 0);
     if (get_integer(L, ld, m, "api", 0, 1, 0x7fff) > ENGINE_API) {
         ld->err = PLACE_NEEDS_UPDATE;
-        luaL_error(L, "needs a newer version of workbench64");
+        luaL_error(L, "needs a newer version of workshop64");
     }
     get_string(L, ld, m, "id", 1, 64);
     get_string(L, ld, m, "title", 1, 32);
