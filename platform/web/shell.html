@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hangout64</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  /* Fill the page; the game letterboxes itself to 4:3. SDL sets an inline size, hence !important. */
+  canvas { display: block; width: 100vw !important; height: 100vh !important; outline: none; }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<script>var Module = { canvas: document.getElementById('canvas') };</script>
+{{{ SCRIPT }}}
+</body>
+</html>

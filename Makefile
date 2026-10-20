@@ -3,13 +3,17 @@ IMAGE_n64 := ghcr.io/dragonminded/libdragon:preview
 IMAGE_ogc := devkitpro/devkitppc:latest
 IMAGE_nds := devkitpro/devkitarm:latest
 IMAGE_3ds := devkitpro/devkitarm:latest
+IMAGE_web := emscripten/emsdk:latest
 
-CONSOLES := n64 ogc nds 3ds
+# Built in Docker; web isn't a console but builds the same way.
+CONSOLES := n64 ogc nds 3ds web
 
 # Keep the N64 toolchain (with libdragon installed into it) in a named volume, so
 # libdragon is only built once. `make n64-reset` drops it, e.g. after an image update.
 N64_VOLUME := hangout64-n64-toolchain
 DOCKER_ARGS_n64 := -v $(N64_VOLUME):/n64_toolchain
+# Emscripten builds its SDL3 port into its cache; keep it so that only happens once.
+DOCKER_ARGS_web := -v hangout64-emsdk-cache:/emsdk/upstream/emscripten/cache
 
 # Stop Git Bash on Windows rewriting the container paths (/src/...) into Windows paths.
 export MSYS_NO_PATHCONV := 1

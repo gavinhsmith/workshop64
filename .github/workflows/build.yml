@@ -26,6 +26,7 @@ jobs:
           - { platform: ogc, image: 'devkitpro/devkitppc:latest', out: 'platform/ogc/*.dol' }
           - { platform: nds, image: 'devkitpro/devkitarm:latest', out: 'platform/nds/*.nds' }
           - { platform: 3ds, image: 'devkitpro/devkitarm:latest', out: 'platform/3ds/*.3dsx' }
+          - { platform: web, image: 'emscripten/emsdk:latest', out: 'build/web/' }
     container: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v4

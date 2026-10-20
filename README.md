@@ -14,6 +14,7 @@ This is the prototype for **workbench64**, a small Roblox-like platform; see the
 | `platform/nds/` | DS | libnds | `.nds` |
 | `platform/3ds/` | 3DS | libctru + citro3d | `.3dsx` |
 | `platform/pc/` | Windows / Linux / macOS | SDL3 + OpenGL | executable |
+| `platform/web/` | browsers | Emscripten, SDL3 + WebGL | `build/web/` (html + js + wasm) |
 
 `tools/` holds the scripts the build runs; `tools/authoring/` holds ones you run by hand when
 editing assets.
@@ -27,7 +28,7 @@ zoom ease too. Walk one way for a moment and the camera slowly swings round behi
 
 | Platform | Move | Jump | Run | Orbit camera | Zoom in / out | Exit |
 |---|---|---|---|---|---|---|
-| PC | WASD | Space | Shift | Arrows | Q / E | Esc |
+| PC, web | WASD | Space | Shift | Arrows | Q / E | Esc (PC) |
 | N64 | Stick | A | B | D-pad | C-up / C-down | — |
 | GameCube | Stick | A | B | C-stick / D-pad | L / R | START |
 | Wii Remote | D-pad | A | 1 | B + D-pad | − / + | HOME |
@@ -52,6 +53,7 @@ make n64    # consoles build in Docker, same images as CI
 make ogc
 make nds
 make 3ds
+make web    # also in Docker
 make        # everything
 make n64-reset  # drop the cached N64 toolchain + libdragon volume (e.g. after an image update)
 ```
@@ -62,6 +64,8 @@ make n64-reset  # drop the cached N64 toolchain + libdragon volume (e.g. after a
 - GameCube/Wii: Dolphin; on hardware via Swiss (GC) or the Homebrew Channel / `wiiload` (Wii)
 - DS: melonDS 1.0+, or a flashcart. DeSmuME 0.9.13 shows white screens for anything built with libnds 2 / calico.
 - 3DS: Azahar, or the Homebrew Launcher / `3dslink`
+- Web: serve `build/web/` over HTTP (browsers won't load wasm from `file://`), e.g.
+  `python3 -m http.server -d build/web`, then open http://localhost:8000
 
 ## Places
 

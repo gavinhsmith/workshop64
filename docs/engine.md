@@ -1,7 +1,7 @@
 # workbench64 engine specification
 
 workbench64 is a small, Roblox-like platform (not a recreation) for the Nintendo 64, GameCube,
-Wii, DS, 3DS and PC. People play **experiences**: worlds built from parts, controlled by Lua,
+Wii, DS, 3DS, PC and the web. People play **experiences**: worlds built from parts, controlled by Lua,
 with their own models, textures, music and UI, played alone or together over the network.
 
 This repository (hangout64) is the prototype that informed this spec. The spec describes where
@@ -195,7 +195,7 @@ Today's mapping, which becomes the default controller:
 
 | Platform | Move | Jump | Run | Orbit | Zoom | Menu |
 |---|---|---|---|---|---|---|
-| PC | WASD | Space | Shift | Arrows | Q / E | Esc |
+| PC, web | WASD | Space | Shift | Arrows | Q / E | Esc |
 | N64 | Stick | A | B | D-pad | C-up / C-down | Start |
 | GameCube | Stick | A | B | C-stick / D-pad | L / R | Start |
 | Wii Remote | D-pad | A | 1 | B + D-pad | − / + | Home |
@@ -635,7 +635,7 @@ What hangout64 already has, and what changes:
 
 | Area | Prototype today | Spec |
 |---|---|---|
-| Platforms, CI | All six build in Docker/CI, releases on tags | Keep |
+| Platforms, CI | All seven (with the web) build in Docker/CI, releases on tags | Keep |
 | Maths | Integer core, `isin`/`icos` | Keep |
 | World | Fixed 20×20 floor + up to 256 unrotated box parts | Parts only, baseplate as a part, wedges, 45° rotation, scene settings |
 | Content | `assets/scene/course.json` packed into an `HG64` place file (TEXR/MESH/PART chunks), built in | An experience folder (§11.6) packed into a `.wb64`: Lua-table logic shipped as-is, plus canonical/variant assets |
