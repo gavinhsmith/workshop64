@@ -9,7 +9,7 @@
 #include "world.h"
 
 static place pl;
-static GLuint gpu_textures[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* by texture slot */
+static GLuint gpu_textures[1 + PLACE_MAX_TEXTURES]; /* by texture slot */
 static GLint u_mvp, u_textured;
 
 /* A mesh in a vertex buffer: one vertex per corner, the triangle's colour copied to each. */
@@ -24,7 +24,7 @@ typedef struct {
     const texture *tex;
 } gpu_mesh;
 
-static gpu_mesh gpu_level, gpu_place[PLACE_MAX_MESHES], gpu_avatars[MAX_PLAYERS];
+static gpu_mesh gpu_level, gpu_place[PLACE_MAX_MESHES], gpu_avatars[MAX_PLAYERS][AVATAR_PARTS];
 static GLuint frame_fbo, frame_tex, frame_depth, quad_vbo;
 static int frame_w; /* the frame's current width */
 
@@ -47,10 +47,9 @@ static gpu_mesh upload_mesh(const mesh *m)
 /* Expand each 16-colour texture to RGB and upload it, nearest-filtered. */
 static void upload_textures(void)
 {
-    texture *all[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* the avatars', then the place's */
+    texture *all[1 + PLACE_MAX_TEXTURES]; /* the avatar's, then the place's */
     int count = 0;
-    for (int i = 0; i < MAX_PLAYERS; i++)
-        all[count++] = &avatar_textures[i];
+    all[count++] = &avatar_texture;
     for (int i = 0; i < pl.texture_count; i++)
         all[count++] = &pl.textures[i];
     static uint8_t rgb[TEXTURE_MAX * TEXTURE_MAX][3];
@@ -179,11 +178,20 @@ static void draw_scene(const world *w, const view *v)
 
     for (int i = 0; i < w->player_count; i++) {
         const player *p = &w->players[i];
+        pose pz = player_pose(p);
         float m[16];
         memcpy(m, cam, sizeof m);
-        translate(m, p->x / 1000.0f, FLOOR_Y + (p->y + player_bob(p)) / 1000.0f, p->z / 1000.0f);
+        translate(m, p->x / 1000.0f, FLOOR_Y + (p->y + pz.lift) / 1000.0f, p->z / 1000.0f);
         rotate_y(m, p->heading);
-        draw_mesh(&gpu_avatars[i], m);
+        for (int k = 0; k < AVATAR_PARTS; k++) { /* each part turns about its joint */
+            int j[3], turn;
+            avatar_place(&pz, k, j, &turn);
+            float pm[16];
+            memcpy(pm, m, sizeof pm);
+            translate(pm, j[0] / 1000.0f, j[1] / 1000.0f, j[2] / 1000.0f);
+            rotate_x(pm, turn);
+            draw_mesh(&gpu_avatars[i][k], pm);
+        }
     }
 }
 
@@ -331,7 +339,8 @@ int main(int argc, char **argv)
     for (int i = 0; i < pl.mesh_count; i++)
         gpu_place[i] = upload_mesh(&pl.meshes[i]);
     for (int i = 0; i < MAX_PLAYERS; i++)
-        gpu_avatars[i] = upload_mesh(&avatar_meshes[i]);
+        for (int k = 0; k < AVATAR_PARTS; k++)
+            gpu_avatars[i][k] = upload_mesh(&avatar_parts[i][k]);
     glEnable(GL_DEPTH_TEST);
 
     emscripten_set_main_loop(frame, 0, true); /* never returns */

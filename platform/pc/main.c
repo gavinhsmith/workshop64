@@ -11,15 +11,14 @@
 #define TEX_H 256
 
 static place pl; /* the loaded place; mesh parts are drawn from it */
-static GLuint gpu_textures[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* by texture slot */
+static GLuint gpu_textures[1 + PLACE_MAX_TEXTURES]; /* by texture slot */
 
 /* Expand each 16-colour place texture to RGB and upload it, nearest-filtered. */
 static void upload_textures(void)
 {
-    texture *all[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* the avatars', then the place's */
+    texture *all[1 + PLACE_MAX_TEXTURES]; /* the avatar's, then the place's */
     int count = 0;
-    for (int i = 0; i < MAX_PLAYERS; i++)
-        all[count++] = &avatar_textures[i];
+    all[count++] = &avatar_texture;
     for (int i = 0; i < pl.texture_count; i++)
         all[count++] = &pl.textures[i];
     static uint8_t rgb[TEXTURE_MAX * TEXTURE_MAX][3];
@@ -115,9 +114,18 @@ static void draw_scene(const world *w, const view *v, int sw)
     for (int i = 0; i < w->player_count; i++) {
         const player *p = &w->players[i];
         glPushMatrix();
-        glTranslatef(p->x / 1000.0f, FLOOR_Y + (p->y + player_bob(p)) / 1000.0f, p->z / 1000.0f);
+        pose pz = player_pose(p);
+        glTranslatef(p->x / 1000.0f, FLOOR_Y + (p->y + pz.lift) / 1000.0f, p->z / 1000.0f);
         glRotatef(p->heading / 10.0f, 0.0f, 1.0f, 0.0f);
-        draw_mesh(&avatar_meshes[i]);
+        for (int k = 0; k < AVATAR_PARTS; k++) { /* each part turns about its joint */
+            int j[3], turn;
+            avatar_place(&pz, k, j, &turn);
+            glPushMatrix();
+            glTranslatef(j[0] / 1000.0f, j[1] / 1000.0f, j[2] / 1000.0f);
+            glRotatef(turn / 10.0f, 1.0f, 0.0f, 0.0f);
+            draw_mesh(&avatar_parts[i][k]);
+            glPopMatrix();
+        }
         glPopMatrix();
     }
 }

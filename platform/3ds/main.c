@@ -21,7 +21,7 @@ typedef struct {
     float tc[2];
 } vertex;
 
-static C3D_Tex gpu_textures[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* by texture slot */
+static C3D_Tex gpu_textures[1 + PLACE_MAX_TEXTURES]; /* by texture slot */
 
 /* Bit-interleave x and y (0..7) into a position in an 8x8 tile (Morton / Z order). */
 static u32 morton8(u32 x, u32 y)
@@ -36,10 +36,9 @@ static u32 morton8(u32 x, u32 y)
  * Morton order, rows stored bottom-up) and upload it, nearest-filtered. */
 static void upload_textures(void)
 {
-    texture *all[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* the avatars', then the place's */
+    texture *all[1 + PLACE_MAX_TEXTURES]; /* the avatar's, then the place's */
     int count = 0;
-    for (int i = 0; i < MAX_PLAYERS; i++)
-        all[count++] = &avatar_textures[i];
+    all[count++] = &avatar_texture;
     for (int i = 0; i < pl.texture_count; i++)
         all[count++] = &pl.textures[i];
     static u16 data[TEXTURE_MAX * TEXTURE_MAX];
@@ -94,20 +93,31 @@ static vertex *add_mesh(vertex *out, const mesh *m)
     return out;
 }
 
-/* Background quad (clip space, drawn with identity matrices), then the guy, the level
- * and the place's meshes, all as triangles. Call after world_init() so the level mesh
- * exists. */
+/* Background quad (clip space, drawn with identity matrices), then every player's avatar
+ * parts, the level and the place's meshes, all as triangles. Call after world_init() so
+ * the level mesh and avatars exist. */
+static int avatar_first[MAX_PLAYERS][AVATAR_PARTS], level_first; /* first vertex of each */
+
 static vertex *build_vbo(void)
 {
     static const float bg[4][2] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
-    int tris = guy_mesh.tris + level_mesh.tris;
+    int tris = level_mesh.tris;
+    for (int i = 0; i < MAX_PLAYERS; i++)
+        for (int k = 0; k < AVATAR_PARTS; k++)
+            tris += avatar_parts[i][k].tris;
     for (int i = 0; i < pl.mesh_count; i++)
         tris += pl.meshes[i].tris;
     vertex *vbo = linearAlloc(sizeof(vertex) * (BG_VERTS + tris * 3));
     vertex *out = vbo;
     for (int i = 0; i < 6; i++)
         *out++ = (vertex){{bg[quad_tris[i]][0], bg[quad_tris[i]][1], -0.5f}, {0.1f, 0.1f, 0.15f}, {0, 0}};
-    out = add_mesh(out, &guy_mesh);
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        for (int k = 0; k < AVATAR_PARTS; k++) {
+            avatar_first[i][k] = out - vbo;
+            out = add_mesh(out, &avatar_parts[i][k]);
+        }
+    }
+    level_first = out - vbo;
     out = add_mesh(out, &level_mesh);
     for (int i = 0; i < pl.mesh_count; i++) {
         mesh_first[i] = out - vbo;
@@ -225,15 +235,24 @@ int main(void)
             const player *p = &w.players[i];
             C3D_Mtx m;
             Mtx_Copy(&m, &view);
-            Mtx_Translate(&m, p->x / 1000.0f, FLOOR_Y + (p->y + player_bob(p)) / 1000.0f, p->z / 1000.0f, true);
+            pose pz = player_pose(p);
+            Mtx_Translate(&m, p->x / 1000.0f, FLOOR_Y + (p->y + pz.lift) / 1000.0f, p->z / 1000.0f, true);
             Mtx_RotateY(&m, C3D_AngleFromDegrees(p->heading / 10.0f), true);
-            C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, u_mv, &m);
-            set_texture(avatar_meshes[i].texture);
-            C3D_DrawArrays(GPU_TRIANGLES, BG_VERTS, guy_mesh.tris * 3);
+            for (int k = 0; k < AVATAR_PARTS; k++) { /* each part turns about its joint */
+                int j[3], turn;
+                avatar_place(&pz, k, j, &turn);
+                set_texture(avatar_parts[i][k].texture); /* only the face is textured */
+                C3D_Mtx pm;
+                Mtx_Copy(&pm, &m);
+                Mtx_Translate(&pm, j[0] / 1000.0f, j[1] / 1000.0f, j[2] / 1000.0f, true);
+                Mtx_RotateX(&pm, C3D_AngleFromDegrees(turn / 10.0f), true);
+                C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, u_mv, &pm);
+                C3D_DrawArrays(GPU_TRIANGLES, avatar_first[i][k], avatar_parts[i][k].tris * 3);
+            }
             set_texture(NULL);
         }
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, u_mv, &view);
-        C3D_DrawArrays(GPU_TRIANGLES, BG_VERTS + guy_mesh.tris * 3, level_mesh.tris * 3);
+        C3D_DrawArrays(GPU_TRIANGLES, level_first, level_mesh.tris * 3);
 
         /* Mesh parts: the model's origin sits at the part's bottom centre. */
         for (int i = 0; i < pl.part_count; i++) {

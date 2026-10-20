@@ -9,8 +9,8 @@ GEN      := $(ROOT)/build/gen
 # python3, or python where python3 doesn't run (on Windows it's often the Store stub).
 PYTHON   ?= $(if $(shell python3 -c "print(1)" 2>/dev/null),python3,python)
 LUA      := $(ROOT)/third_party/lua
-CORE_SRC := world.c wb64.c lua.c
-GEN_SRC  := guy_mesh.c builtin_experience.c
+CORE_SRC := world.c avatar.c wb64.c lua.c
+GEN_SRC  := builtin_experience.c
 CORE_OBJ := $(CORE_SRC:.c=.o) $(GEN_SRC:.c=.o)
 CORE_HDR := $(GEN)/lua32.h
 CORE_INC := -I$(CORE) -I$(GEN) -I$(LUA)
@@ -22,10 +22,6 @@ endif
 
 # A failed generator must not leave a half-written file that looks up to date.
 .DELETE_ON_ERROR:
-
-$(GEN)/guy_mesh.c: $(ROOT)/tools/obj2c.py $(ROOT)/tools/objload.py $(ROOT)/tools/texload.py $(ROOT)/assets/model/guy.obj $(ROOT)/assets/texture/guy_base.png $(ROOT)/assets/texture/guy_coat.png
-	@mkdir -p $(dir $@)
-	$(PYTHON) $< $(ROOT)/assets/model/guy.obj $@ guy_mesh 255,255,255 $(ROOT)/assets/texture/guy_base.png guy_texture $(ROOT)/assets/texture/guy_coat.png
 
 $(GEN)/builtin_experience.c: $(ROOT)/tools/wb64.py $(ROOT)/tools/objload.py $(ROOT)/tools/texload.py $(wildcard $(EXPERIENCE)/* $(EXPERIENCE)/*/* $(EXPERIENCE)/*/*/*)
 	@mkdir -p $(dir $@)

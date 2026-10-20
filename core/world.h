@@ -52,9 +52,6 @@ typedef struct {
 #define FLOOR_TILES 10 /* per side, 2 units each, centred on the origin */
 #define FLOOR_Y -1     /* where the floor is drawn; game heights are measured from it */
 
-extern const mesh guy_mesh; /* feet at y = 0, facing -Z; see tools/obj2c.py */
-extern texture guy_texture;      /* its atlas, coat in grey: palette entries guy_texture_coat_first..15 */
-extern const int guy_texture_coat_first;
 extern mesh level_mesh;      /* floor + box parts of the current place, built by world_init() */
 
 /* Lengths are in thousandths of a unit, angles in tenths of a degree. Heights (y) are
@@ -121,7 +118,23 @@ typedef struct {
 } input;
 
 #define PLAYER_RADIUS 350  /* collision box half-width */
-#define PLAYER_HEIGHT 2400
+#define PLAYER_HEIGHT 1600 /* the avatar is 1.54 tall */
+
+/* The avatar's parts (ARM is the upper arm, LEG the thigh; a forearm hangs off its upper arm
+ * at the elbow, a shin off its thigh at the knee, the face off the head), and a pose: how far
+ * each part swings about its joint, on top of its parent's swing (tenths of a degree, positive
+ * forward; an upper arm at 900 points straight ahead), and how high the whole avatar is lifted
+ * off its feet (thousandths; only for drawing, collision uses y). */
+enum {
+    AVATAR_TORSO, AVATAR_HEAD, AVATAR_FACE, AVATAR_ARM_L, AVATAR_ARM_R, AVATAR_FOREARM_L, AVATAR_FOREARM_R,
+    AVATAR_LEG_L, AVATAR_LEG_R, AVATAR_SHIN_L, AVATAR_SHIN_R, AVATAR_PARTS
+};
+typedef struct {
+    int lift;
+    int swing[AVATAR_PARTS];
+} pose;
+
+enum { ANIM_IDLE, ANIM_WALK, ANIM_RUN, ANIM_JUMP, ANIM_FALL };
 
 typedef struct {
     int x, y, z;   /* feet */
@@ -129,7 +142,11 @@ typedef struct {
     int on_ground;
     int heading;   /* 0..3599; 0 faces -Z, turns toward where it moves */
     int target_heading;
-    int stride;    /* ticks into the running cycle while running on the ground, else 0 */
+    int anim;      /* ANIM_*: what the avatar is doing */
+    int anim_time; /* ticks since that started */
+    int air;       /* ticks off the ground */
+    int blend;     /* ticks left easing from `from` into the animation */
+    pose from;     /* the pose when the animation last changed */
     uint8_t coat[3];
 } player;
 
@@ -146,16 +163,30 @@ typedef struct {
  * colour and their avatar built. */
 world world_init(const place *pl, int players);
 
-/* Avatars: guy_mesh wearing player i's coat colour (the coat's palette entries swapped).
- * Draw player i with avatar_meshes[i]. Built for all MAX_PLAYERS by world_init(); call
- * avatar_build() again if a coat changes (then re-upload the texture). */
-extern texture avatar_textures[MAX_PLAYERS];
-extern mesh avatar_meshes[MAX_PLAYERS];
+/* Avatars (core/avatar.c): a low-poly cartoon figure, at most 160 triangles in AVATAR_PARTS
+ * parts (the face is its own part so only it is textured). Each part's mesh is around its
+ * joint, so player i is drawn with pose = player_pose(p) as
+ *   translate(x, FLOOR_Y + y + pose.lift, z) rotateY(heading), then for each part k:
+ *   avatar_place(&pose, k, at, &angle); translate(at) rotateX(angle) avatar_parts[i][k]
+ * The dress and sleeves wear player i's coat colour (triangle colours); the face part is textured
+ * with avatar_texture. Built for all MAX_PLAYERS by world_init(); call
+ * avatar_build() again if a coat changes. */
+extern texture avatar_texture;
+extern mesh avatar_parts[MAX_PLAYERS][AVATAR_PARTS];
+extern const int avatar_joints[AVATAR_PARTS][3]; /* at rest; thousandths, from the feet */
+extern const int avatar_parent[AVATAR_PARTS];    /* the part each hangs off, or -1 for the body */
 void avatar_build(int i, const uint8_t coat[3]);
 
-/* How far to draw a player above their feet (thousandths): a little hop each running
- * step. Only for drawing; collision uses y. */
-int player_bob(const player *p);
+/* Where part k's joint is in pose p (its parent's swing moves it) and how far the part is
+ * turned there (its swing plus its parent's: every joint turns about the same axis). */
+void avatar_place(const pose *p, int k, int at[3], int *angle);
+
+/* The pose to draw a player in: their animation, eased from the previous one for a moment
+ * after it changes. */
+pose player_pose(const player *p);
+
+/* Pick and advance a player's animation after a tick's movement (used by world_update). */
+void avatar_step(player *p, int moved, int running);
 
 /* The game advances in fixed ticks, the same rate on every platform whatever the display
  * does. Each port asks a ticker how many ticks are due by its microsecond clock (any origin,
@@ -175,7 +206,7 @@ world world_update(world w, const input inputs[MAX_PLAYERS]);
  * it slowly swings round behind them (not when they walk toward it). Platforms render with:
  *   view:   translate(0, 0, -dist) rotateX(pitch) rotateY(-yaw) translate(-x, -y, -z)
  *   level:  as is
- *   player: translate(x, FLOOR_Y + y + player_bob, z) rotateY(heading)                */
+ *   player: see avatar_parts above                                                  */
 typedef struct {
     int x, y, z; /* point it looks at: their shoulders over the ground they stand on, plus half of a jump */
     int yaw;     /* increasing moves the camera right; not wrapped */
@@ -191,7 +222,7 @@ typedef struct {
 
 #define CAM_PITCH_MAX 800
 #define CAM_PITCH_MIN -40 /* looking up a little; zoomed out, the camera stays a unit above the floor */
-#define CAM_FOCUS 800     /* views aren't offset by FLOOR_Y, so this looks 1.8 above the feet: the shoulders */
+#define CAM_FOCUS 300     /* views aren't offset by FLOOR_Y, so this looks 1.3 above the feet: the head */
 #define CAM_DIST_MIN 3000
 #define CAM_DIST_MAX 12000
 

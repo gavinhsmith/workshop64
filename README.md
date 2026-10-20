@@ -1,7 +1,7 @@
 # hangout64
 Multi-platform demo for a simple 3D homebrew title for Nintendo 64 and beyond.
 
-Currently a little guy walking around a checkered floor with a few parts to climb, rendered 240 lines high everywhere (DS: native 256x192) and scaled up; wider screens show a wider view (3DS, Wii in 16:9, PC and web at any window shape).
+Currently a little cartoon figure walking around a checkered floor with a few parts to climb, rendered 240 lines high everywhere (DS: native 256x192) and scaled up; wider screens show a wider view (3DS, Wii in 16:9, PC and web at any window shape).
 
 This is the prototype for **workbench64**, a small Roblox-like platform; see the
 [engine specification](docs/engine.md) for where it's going.
@@ -16,12 +16,11 @@ This is the prototype for **workbench64**, a small Roblox-like platform; see the
 | `platform/pc/` | Windows / Linux / macOS | SDL3 + OpenGL | `build/pc/hangout64` |
 | `platform/web/` | browsers | Emscripten, SDL3 + WebGL | `build/web/` (html + js + wasm) |
 
-`tools/` holds the scripts the build runs; `tools/authoring/` holds ones you run by hand when
-editing assets.
+`tools/` holds the scripts the build runs.
 
 ## Controls
 
-The guy walks around a checkered floor and turns to face where he's going; the camera
+The figure walks around a checkered floor and turns to face where it's going; the camera
 eases after him. Movement is relative to the camera (forward = into the screen). Orbit and
 zoom ease too. Walk one way for a moment and the camera slowly swings round behind him
 (except when he's walking toward it).
@@ -43,8 +42,8 @@ same with the browser window.
 
 ## Building
 
-Every build needs Python 3 (standard library only): the avatar and the built-in experience
-are generated into `build/gen` from `assets/` and `experiences/course/`. Lua is a submodule:
+Every build needs Python 3 (standard library only): the built-in experience is generated
+into `build/gen` from `experiences/course/`. Lua is a submodule:
 clone with `--recursive` or run `git submodule update --init`. On Windows, `make pc` and
 `make test` use MSYS2's UCRT64 gcc and SDL3 (with `C:\msys64\ucrt64\bin` on PATH); from Git
 Bash, put that folder before Git's own `/mingw64/bin`, or gcc picks up the wrong DLLs and fails
@@ -102,16 +101,14 @@ console. Textures are PNGs with at most 16 colours, up to 32 px per side (32x32 
 texture memory), padded to a power of two if needed; they are drawn nearest-filtered and
 tinted by the model's colour.
 
-Engine assets (like the avatar) are compiled in instead, with `tools/obj2c.py` (also run by the build). The avatar's
-texture is the atlas `assets/texture/guy_base.png` with `guy_coat.png` layered on top; the
-coat's greys are tinted with each player's coat colour at runtime by swapping palette
-entries. `tools/authoring/guy_uvs.py` maps the atlas onto the model, stretching each face's region to fit it
-(cutting tapered faces along texel columns so stripes stay straight) and hiding the leg and
-arm ends. Run it on a fresh export of `guy.obj` (it rewrites the file and refuses to run twice):
-
-```sh
-python3 tools/authoring/guy_uvs.py assets/model/guy.obj
-```
+The avatar is part of the engine, built in C (`core/avatar.c`): a chunky low-poly cartoon
+figure (a square head on a dress-like body, arms and legs of two equal, nearly cube-shaped
+sections each, with round gloves and big shoes; 146 triangles, so four fit the DS beside a
+full scene) whose arms and legs swing at the shoulders and hips and bend at the elbows and
+knees. The face is a 16x16 texture drawn as ASCII art in the source. Each
+player's dress and sleeves wear their coat colour. Its animations (idle,
+walk, run, jump, fall) are poses computed each tick from what the player is doing; when the
+animation changes, the pose eases from the old one over 0.2 s.
 
 Models are OBJ files exported Z-up with the front facing -Y (as from OwlCAD).
 

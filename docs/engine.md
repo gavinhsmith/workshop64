@@ -485,8 +485,8 @@ DS and N64 hardware before they're fixed:
 | `.wb64` download per scene | N64 RAM and link speed | ~256 KB per platform |
 | Save data | N64 Controller Pak | 1–2 KB per experience |
 
-The cost of the avatar matters: today's 412-triangle avatar × 4 players is about a third of the
-triangle budget.
+The cost of the avatar matters: avatars get at most 160 triangles each (today's has 146), so four
+fit in what the DS's 2048 leaves beside a full 1400-triangle scene.
 
 **Strict mode on PC.** *Proposed:* the PC build can enforce every budget live (memory caps,
 instruction limits, triangle and texture counts, the 256×192 UI safe area) and report breaches
@@ -647,7 +647,7 @@ What hangout64 already has, and what changes:
 | Assets | OBJ models, 16-colour PNG textures converted on load | Canonical forms + tool-made variants; collision in models |
 | Rendering | Each `main.c` draws the level itself | Core draw list; ports render it their own way |
 | Timing | Fixed 30 Hz tick on every platform (`ticker_due` in the core); drawn at display rate without interpolation | Keep; interpolate where a port can afford it |
-| Avatar | 412-triangle guy, tinted coat, run hop | Count it against the budget; customisation as data |
+| Avatar | 146-triangle low-poly cartoon figure (square head, dress body, two-section box limbs bending at elbows and knees), animated as whole parts (§9.1: idle, walk, run, jump, fall, eased between), coat-coloured dress | Count it against the budget; customisation as data |
 | Scripting | Lua 5.4.9 (submodule, 32-bit numbers, no standard libraries) reads the logic files with memory and instruction caps; scripts don't run yet | §7 |
 | UI, audio, networking, saves | None | §14, §9.4, §10, §11.4 |
 

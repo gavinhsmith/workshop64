@@ -6,16 +6,15 @@
 #define STICK_DEADZONE 32
 
 static place pl; /* the loaded place; mesh parts are drawn from it */
-static GLuint gpu_textures[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* by texture slot */
+static GLuint gpu_textures[1 + PLACE_MAX_TEXTURES]; /* by texture slot */
 
 /* Expand each 16-colour place texture to RGBA16 (32x32 = 2 KB, fits TMEM) and upload it,
  * nearest-filtered. */
 static void upload_textures(void)
 {
-    texture *all[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* the avatars', then the place's */
+    texture *all[1 + PLACE_MAX_TEXTURES]; /* the avatar's, then the place's */
     int count = 0;
-    for (int i = 0; i < MAX_PLAYERS; i++)
-        all[count++] = &avatar_textures[i];
+    all[count++] = &avatar_texture;
     for (int i = 0; i < pl.texture_count; i++)
         all[count++] = &pl.textures[i];
     glGenTextures(count, gpu_textures);
@@ -118,7 +117,10 @@ int main(void)
     upload_textures();
     camera cam = camera_init();
     ticker tk = {0};
-    GLuint level_list = compile_mesh(&level_mesh), guy_list = compile_mesh(&avatar_meshes[0]); /* geometry only: the texture is bound per player */
+    GLuint level_list = compile_mesh(&level_mesh), avatar_lists[MAX_PLAYERS][AVATAR_PARTS];
+    for (int i = 0; i < MAX_PLAYERS; i++)
+        for (int k = 0; k < AVATAR_PARTS; k++)
+            avatar_lists[i][k] = compile_mesh(&avatar_parts[i][k]);
     GLuint mesh_lists[PLACE_MAX_MESHES];
     for (int i = 0; i < pl.mesh_count; i++)
         mesh_lists[i] = compile_mesh(&pl.meshes[i]);
@@ -152,10 +154,19 @@ int main(void)
         for (int i = 0; i < w.player_count; i++) {
             const player *p = &w.players[i];
             glPushMatrix();
-            glTranslatef(p->x / 1000.0f, FLOOR_Y + (p->y + player_bob(p)) / 1000.0f, p->z / 1000.0f);
+            pose pz = player_pose(p);
+            glTranslatef(p->x / 1000.0f, FLOOR_Y + (p->y + pz.lift) / 1000.0f, p->z / 1000.0f);
             glRotatef(p->heading / 10.0f, 0.0f, 1.0f, 0.0f);
-            bind_texture(&avatar_meshes[i]);
-            glCallList(guy_list);
+            for (int k = 0; k < AVATAR_PARTS; k++) { /* each part turns about its joint */
+                int j[3], turn;
+                avatar_place(&pz, k, j, &turn);
+                bind_texture(&avatar_parts[i][k]); /* only the face is textured */
+                glPushMatrix();
+                glTranslatef(j[0] / 1000.0f, j[1] / 1000.0f, j[2] / 1000.0f);
+                glRotatef(turn / 10.0f, 1.0f, 0.0f, 0.0f);
+                glCallList(avatar_lists[i][k]);
+                glPopMatrix();
+            }
             glDisable(GL_TEXTURE_2D);
             glPopMatrix();
         }

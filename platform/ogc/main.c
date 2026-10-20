@@ -26,16 +26,15 @@
 #define FIFO_SIZE (256 * 1024)
 
 static place pl; /* the loaded place; mesh parts are drawn from it */
-static GXTexObj gpu_textures[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* by texture slot */
+static GXTexObj gpu_textures[1 + PLACE_MAX_TEXTURES]; /* by texture slot */
 
 /* Expand each 16-colour place texture to RGB565 in GX's tiled layout (4x4-pixel tiles,
  * 32 bytes each, row-major) and set it up nearest-filtered. */
 static void upload_textures(void)
 {
-    texture *all[MAX_PLAYERS + PLACE_MAX_TEXTURES]; /* the avatars', then the place's */
+    texture *all[1 + PLACE_MAX_TEXTURES]; /* the avatar's, then the place's */
     int count = 0;
-    for (int i = 0; i < MAX_PLAYERS; i++)
-        all[count++] = &avatar_textures[i];
+    all[count++] = &avatar_texture;
     for (int i = 0; i < pl.texture_count; i++)
         all[count++] = &pl.textures[i];
     for (int i = 0; i < count; i++) {
@@ -198,13 +197,23 @@ static void draw_scene(const world *w, const view *v)
         draw_mesh(&pl.meshes[q->mesh], mv);
     }
 
-    /* player = translate(x, FLOOR_Y + y, z) rotY(heading) */
+    /* player = translate(x, FLOOR_Y + y + lift, z) rotY(heading); each part then
+     * translate(joint) rotX(swing) */
     for (int i = 0; i < w->player_count; i++) {
         const player *p = &w->players[i];
+        pose pz = player_pose(p);
         guMtxRotDeg(ry, 'y', p->heading / 10.0f);
-        guMtxTransApply(ry, model, p->x / 1000.0f, FLOOR_Y + (p->y + player_bob(p)) / 1000.0f, p->z / 1000.0f);
-        guMtxConcat(view, model, mv);
-        draw_mesh(&avatar_meshes[i], mv);
+        guMtxTransApply(ry, model, p->x / 1000.0f, FLOOR_Y + (p->y + pz.lift) / 1000.0f, p->z / 1000.0f);
+        for (int k = 0; k < AVATAR_PARTS; k++) {
+            int j[3], turn;
+            avatar_place(&pz, k, j, &turn);
+            Mtx joint, part;
+            guMtxRotDeg(rx, 'x', turn / 10.0f);
+            guMtxTransApply(rx, joint, j[0] / 1000.0f, j[1] / 1000.0f, j[2] / 1000.0f);
+            guMtxConcat(model, joint, part);
+            guMtxConcat(view, part, mv);
+            draw_mesh(&avatar_parts[i][k], mv);
+        }
     }
 }
 

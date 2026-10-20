@@ -11,8 +11,6 @@ mesh level_mesh = {.verts = level_verts, .colors = level_colors};
 /* Rates are per tick (TICK_HZ, 30 a second). */
 #define MOVE_SPEED 120 /* thousandths of a unit per tick: 3.6 units a second */
 #define RUN_SPEED 220
-#define RUN_STEP 10   /* ticks per running step: one hop each */
-#define RUN_BOB 150   /* height of a hop */
 #define DIAGONAL 2896 /* 1/sqrt(2), scaled by 4096 */
 #define ORBIT_SPEED 40
 #define ZOOM_SPEED 200
@@ -72,25 +70,6 @@ static void build_level_mesh(void)
             t = add_quad(t, faces[f], p->color, shade[f]);
     }
     level_mesh.tris = t;
-}
-
-texture avatar_textures[MAX_PLAYERS];
-mesh avatar_meshes[MAX_PLAYERS];
-
-/* The lightest grey of the coat becomes the coat colour exactly, darker greys darker in
- * proportion, so the coat keeps its shading. */
-void avatar_build(int i, const uint8_t coat[3])
-{
-    texture *t = &avatar_textures[i];
-    *t = guy_texture;
-    int light = 1;
-    for (int c = guy_texture_coat_first; c < 16; c++)
-        light = guy_texture.palette[c][0] > light ? guy_texture.palette[c][0] : light;
-    for (int c = guy_texture_coat_first; c < 16; c++)
-        for (int a = 0; a < 3; a++)
-            t->palette[c][a] = coat[a] * guy_texture.palette[c][0] / light;
-    avatar_meshes[i] = guy_mesh;
-    avatar_meshes[i].texture = t;
 }
 
 world world_init(const place *pl, int players)
@@ -232,10 +211,7 @@ static player update_player(player p, input in)
         p.on_ground = 1;
     }
 
-    /* Two steps make a cycle; restart from the ground whenever they stop running
-     * (or run into a wall). */
-    int moved = p.x != old_x || p.z != old_z;
-    p.stride = (in.buttons & RUN) && moved && p.on_ground ? p.stride % (2 * RUN_STEP) + 1 : 0;
+    avatar_step(&p, p.x != old_x || p.z != old_z, !!(in.buttons & RUN));
 
     /* Face the way you're moving: the camera's yaw plus the stick direction
      * (forward 0, left +90, right -90, back 180; diagonals in between). */
@@ -252,11 +228,6 @@ static player update_player(player p, input in)
     int turn = wrap3600(p.target_heading - p.heading + 1800) - 1800;
     p.heading = wrap3600(p.heading + ease(0, turn, TURN_EASE));
     return p;
-}
-
-int player_bob(const player *p)
-{
-    return abs(isin(p->stride * 180 / RUN_STEP)) * RUN_BOB / 4096;
 }
 
 int ticker_due(ticker *t, uint64_t now_us)

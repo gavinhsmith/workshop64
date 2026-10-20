@@ -133,7 +133,7 @@ static void test_experience_loader(void)
     /* The crates are a group at x 3.1; its parts are placed relative to it. */
     assert(pl.parts[8].x == 2500 && pl.parts[9].x == 3700 && pl.parts[10].x == 3100 && pl.parts[10].y == 1500);
     const mesh *statue = &pl.meshes[1], *crate = &pl.meshes[0];
-    assert(statue->tris == guy_mesh.tris && statue->texture == NULL && statue->uvs == NULL);
+    assert(statue->tris > 400 && statue->texture == NULL && statue->uvs == NULL);
     assert(statue->colors[0][0] <= 230 && statue->colors[0][0] > 100); /* the .mtl's gold, shaded */
     int lo = 0, hi = 0;
     for (int i = 0; i < statue->tris * 3; i++) {
@@ -266,6 +266,119 @@ static void test_experience_loader(void)
     assert(try_logic("return 5", box, "should return a table") == PLACE_BAD_DATA);
 }
 
+static int imax(int a, int b) { return a > b ? a : b; }
+
+/* At most 160 triangles (four fit the DS's budget beside a full scene), from the feet to
+ * within the player's height; only the face is textured; each player's shirt wears their coat. */
+static void test_avatar(const world *w)
+{
+    assert(avatar_texture.w == 16 && avatar_texture.h == 16);
+    assert(texel(&avatar_texture, 0, 0) == 0 && texel(&avatar_texture, 3, 4) == 1); /* skin, an eye */
+    int lo = 99999, hi = -99999, total = 0;
+    for (int k = 0; k < AVATAR_PARTS; k++) {
+        const mesh *m = &avatar_parts[0][k];
+        assert(m->tris > 0 && (m->texture != NULL) == (k == AVATAR_FACE) && (m->uvs != NULL) == (k == AVATAR_FACE));
+        total += m->tris;
+        for (int i = 0; i < m->tris * 3; i++) {
+            int y = avatar_joints[k][1] + m->verts[i][1] * 1000 / MESH_ONE;
+            lo = y < lo ? y : lo;
+            hi = y > hi ? y : hi;
+            if (m->uvs)
+                assert(m->uvs[i][0] >= 0 && m->uvs[i][0] <= MESH_ONE && m->uvs[i][1] >= 0 && m->uvs[i][1] <= MESH_ONE);
+        }
+    }
+    assert(total <= 160 && abs(lo) <= 4 && hi > PLAYER_HEIGHT - 100 && hi <= PLAYER_HEIGHT);
+    assert(avatar_parts[0][AVATAR_FACE].tris == 2); /* the front of the head */
+
+    /* A forearm hangs off its upper arm: at rest it's at its own joint; with the upper arm
+     * swung straight ahead, the elbow comes forward to shoulder height and the forearm turns
+     * with it. */
+    pose rest = {0}, ahead = {0};
+    int at[3], angle;
+    const int *elbow = avatar_joints[AVATAR_FOREARM_L], *shoulder = avatar_joints[AVATAR_ARM_L];
+    avatar_place(&rest, AVATAR_FOREARM_L, at, &angle);
+    assert(at[0] == elbow[0] && at[1] == elbow[1] && at[2] == elbow[2] && angle == 0);
+    ahead.swing[AVATAR_ARM_L] = 900;
+    ahead.swing[AVATAR_FOREARM_L] = 300;
+    avatar_place(&ahead, AVATAR_FOREARM_L, at, &angle);
+    assert(at[0] == elbow[0] && abs(at[1] - shoulder[1]) <= 3 && abs(at[2] + (shoulder[1] - elbow[1])) <= 3);
+    assert(angle == 1200);
+    avatar_place(&ahead, AVATAR_ARM_L, at, &angle);
+    assert(at[1] == shoulder[1] && angle == 900); /* the upper arm hangs off the body */
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        const mesh *torso = &avatar_parts[i][AVATAR_TORSO];
+        const uint8_t *shirt = torso->colors[torso->tris - 1]; /* the top of the body */
+        for (int a = 0; a < 3; a++)
+            assert(shirt[a] <= w->players[i].coat[a] && shirt[a] * 100 >= w->players[i].coat[a] * 54);
+        assert(avatar_parts[i][AVATAR_HEAD].colors[0][0] == avatar_parts[0][AVATAR_HEAD].colors[0][0]); /* skin */
+        assert(avatar_parts[i][AVATAR_LEG_L].verts == avatar_parts[0][AVATAR_LEG_L].verts);
+    }
+}
+
+/* Idle, walk, run, jump and fall, and smooth changes between them. */
+static void test_animation(world w)
+{
+    assert(run(w, 0, 0, 10).players[0].anim == ANIM_IDLE);
+
+    /* Walking and running swing the legs opposite each other, running further, with a hop. */
+    int walk_max = 0, run_max = 0, hop = 0;
+    world a = w, b = w;
+    for (int i = 0; i < 30; i++) {
+        a = run(a, MOVE_RIGHT, 0, 1);
+        b = run(b, MOVE_RIGHT | RUN, 0, 1);
+        pose pa = player_pose(&a.players[0]), pb = player_pose(&b.players[0]);
+        assert(pa.swing[AVATAR_LEG_L] == -pa.swing[AVATAR_LEG_R] && pb.swing[AVATAR_ARM_L] == -pb.swing[AVATAR_ARM_R]);
+        walk_max = imax(walk_max, pa.swing[AVATAR_LEG_L]);
+        run_max = imax(run_max, pb.swing[AVATAR_LEG_L]);
+        hop = imax(hop, pb.lift);
+    }
+    assert(a.players[0].anim == ANIM_WALK && b.players[0].anim == ANIM_RUN);
+    assert(walk_max > 250 && run_max > 450 && hop > 120);
+
+    /* Jumping raises the arms and tucks a knee; past the top of the jump it's a fall. */
+    world j = run(w, JUMP, 0, 1);
+    assert(j.players[0].anim == ANIM_JUMP);
+    j = run(j, 0, 0, 8);
+    pose up = player_pose(&j.players[0]);
+    assert(j.players[0].anim == ANIM_JUMP && up.swing[AVATAR_ARM_L] > 600 && up.swing[AVATAR_SHIN_L] < -500); /* arms up, knee tucked */
+    j = run(j, 0, 0, 10);
+    assert(j.players[0].anim == ANIM_FALL);
+    assert(run(j, 0, 0, 40).players[0].anim == ANIM_IDLE); /* landed */
+
+    /* Dropping from a height is a fall; stepping down off the curb (0.3) isn't. */
+    world drop = w;
+    drop.players[0].y = 3000;
+    drop.players[0].on_ground = 0;
+    assert(run(drop, 0, 0, 12).players[0].anim == ANIM_FALL);
+    world curb = run(w, MOVE_BACK, 0, 32); /* on top of the curb */
+    for (int i = 0; i < 20; i++) {
+        curb = run(curb, MOVE_BACK, 0, 1);
+        assert(curb.players[0].anim == ANIM_WALK);
+    }
+
+    /* Changes ease in: idle, walk, run, a running jump, landing, stopping. No part jumps
+     * more than 40 degrees in a tick, and the lift never jumps more than 0.06. */
+    static const struct { unsigned buttons; int ticks; } script[] = {
+        {0, 10}, {MOVE_FWD, 20}, {MOVE_FWD | RUN, 15}, {MOVE_FWD | RUN | JUMP, 1}, {MOVE_FWD | RUN, 25}, {0, 20},
+    };
+    world s = w;
+    pose last = player_pose(&s.players[0]);
+    int anims = 0, prev = s.players[0].anim;
+    for (unsigned k = 0; k < sizeof script / sizeof script[0]; k++) {
+        for (int t = 0; t < script[k].ticks; t++) {
+            s = run(s, script[k].buttons, 0, 1);
+            pose now = player_pose(&s.players[0]);
+            for (int part = 0; part < AVATAR_PARTS; part++)
+                assert(abs(now.swing[part] - last.swing[part]) <= 400);
+            assert(abs(now.lift - last.lift) <= 60);
+            anims += s.players[0].anim != prev;
+            prev = s.players[0].anim;
+            last = now;
+        }
+    }
+    assert(anims >= 5); /* went through walk, run, jump, fall, back to running and idle */
+}
+
 int main(void)
 {
     test_experience_loader();
@@ -363,14 +476,10 @@ int main(void)
     o = follow(o, CAM_UP | CAM_IN, p0, 300);
     assert(o.now.pitch == CAM_PITCH_MAX && o.now.dist == CAM_DIST_MIN);
 
-    /* Running is faster than walking and hops each step, back down between steps;
-     * walking doesn't hop. */
+    /* Running is faster than walking. */
     world walked = run(w, MOVE_RIGHT, 0, 30), ran = run(w, MOVE_RIGHT | RUN, 0, 30);
     assert(ran.players[0].x - p0->x > (walked.players[0].x - p0->x) * 3 / 2);
-    assert(player_bob(&walked.players[0]) == 0);
-    world mid = run(w, MOVE_RIGHT | RUN, 0, 5), land = run(w, MOVE_RIGHT | RUN, 0, 10);
-    assert(player_bob(&mid.players[0]) == 150 && player_bob(&land.players[0]) == 0);
-    assert(player_bob(&run(ran, RUN, 0, 1).players[0]) == 0); /* stopped */
+    test_animation(w);
 
     /* The ticker runs exactly TICK_HZ ticks a second whatever the polling rate, and drops
      * time after a stall instead of fast-forwarding through it. */
@@ -415,40 +524,7 @@ int main(void)
     onstep = camera_update(onstep, 0, &hop.players[0]);
     assert(onstep.target.y == 600 + (hop.players[0].y - 600) / 2 + CAM_FOCUS);
 
-    /* The avatar is textured with its 16x16 atlas, and every texture coordinate is on it. */
-    assert(guy_mesh.texture == &guy_texture && guy_texture.w == 16 && guy_texture.h == 16);
-    for (int i = 0; i < guy_mesh.tris * 3; i++)
-        for (int a = 0; a < 2; a++)
-            assert(guy_mesh.uvs[i][a] >= 0 && guy_mesh.uvs[i][a] <= MESH_ONE);
-
-    /* Each player's avatar wears their coat: the coat's palette entries are swapped (the
-     * lightest grey becomes the coat colour), everything else is the guy's atlas. */
-    for (int i = 0; i < MAX_PLAYERS; i++) {
-        const texture *t = avatar_meshes[i].texture;
-        assert(t == &avatar_textures[i] && t->pixels == guy_texture.pixels);
-        assert(avatar_meshes[i].verts == guy_mesh.verts && avatar_meshes[i].uvs == guy_mesh.uvs);
-        for (int c = 0; c < 16; c++) {
-            for (int a = 0; a < 3; a++) {
-                if (c < guy_texture_coat_first)
-                    assert(t->palette[c][a] == guy_texture.palette[c][a]);
-                else
-                    assert(t->palette[c][a] <= w.players[i].coat[a]);
-            }
-        }
-    }
-    int brightest = guy_texture_coat_first;
-    for (int c = guy_texture_coat_first; c < 16; c++)
-        if (guy_texture.palette[c][0] > guy_texture.palette[brightest][0])
-            brightest = c;
-    assert(avatar_textures[0].palette[brightest][0] == 196 && avatar_textures[1].palette[brightest][2] == 172);
-
-    /* Model: feet on y = 0, about 2.4 units tall. */
-    int lo = 0, hi = 0;
-    for (int i = 0; i < guy_mesh.tris * 3; i++) {
-        lo = guy_mesh.verts[i][1] < lo ? guy_mesh.verts[i][1] : lo;
-        hi = guy_mesh.verts[i][1] > hi ? guy_mesh.verts[i][1] : hi;
-    }
-    assert(lo == 0 && abs(hi - 24 * MESH_ONE / 10) <= 1);
+    test_avatar(&w);
 
     /* Level mesh: checkered floor at FLOOR_Y, then 10 triangles per box part (not the
      * 4 mesh parts), its top face first, drawn at the part's top. */

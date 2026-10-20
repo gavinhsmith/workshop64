@@ -10,12 +10,6 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 set(GEN ${CMAKE_BINARY_DIR}/gen)
 set(TOOLS ${ROOT}/tools/objload.py ${ROOT}/tools/texload.py)
-file(GLOB ASSETS ${ROOT}/assets/model/* ${ROOT}/assets/texture/*)
-add_custom_command(OUTPUT ${GEN}/guy_mesh.c
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN}
-    COMMAND Python3::Interpreter ${ROOT}/tools/obj2c.py ${ROOT}/assets/model/guy.obj ${GEN}/guy_mesh.c guy_mesh 255,255,255
-            ${ROOT}/assets/texture/guy_base.png guy_texture ${ROOT}/assets/texture/guy_coat.png
-    DEPENDS ${ROOT}/tools/obj2c.py ${TOOLS} ${ASSETS})
 set(LUA ${ROOT}/third_party/lua)
 if(NOT EXISTS ${LUA}/luaconf.h)
     message(FATAL_ERROR "third_party/lua is empty: run git submodule update --init")
@@ -31,8 +25,8 @@ add_custom_command(OUTPUT ${GEN}/lua32.h
     COMMAND Python3::Interpreter ${ROOT}/tools/lua32.py ${LUA}/luaconf.h ${GEN}/lua32.h
     DEPENDS ${ROOT}/tools/lua32.py ${LUA}/luaconf.h)
 
-add_executable(hangout64 main.c ${ROOT}/core/world.c ${ROOT}/core/wb64.c ${ROOT}/core/lua.c
-    ${GEN}/guy_mesh.c ${GEN}/builtin_experience.c ${GEN}/lua32.h)
+add_executable(hangout64 main.c ${ROOT}/core/world.c ${ROOT}/core/avatar.c ${ROOT}/core/wb64.c ${ROOT}/core/lua.c
+    ${GEN}/builtin_experience.c ${GEN}/lua32.h)
 target_include_directories(hangout64 PRIVATE ${ROOT}/core ${GEN} ${LUA})
 if(NOT WIN32)
     target_link_libraries(hangout64 PRIVATE m)
