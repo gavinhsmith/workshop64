@@ -25,8 +25,11 @@ Each item is marked:
 3. **Each port optimizes for its hardware.** *Decided.* The core says what to draw and play; each
    platform decides how (display lists, native formats, batching). Ports spend spare headroom on
    smoothness, not on extra content.
-4. **The look is fixed.** *Decided.* 320×240 everywhere (DS 256×192), scaled up nearest-neighbour,
-   16-colour textures, static lighting.
+4. **The look is fixed.** *Decided.* 240 lines high everywhere (DS 192), scaled up
+   nearest-neighbour, 16-colour textures, static lighting. The width follows the screen's shape:
+   320 on a 4:3 screen, wider on wider ones (3DS top screen 400, a 16:9 window about 427), with
+   the same vertical view, so wider screens see more to the sides. The Wii follows its 4:3 / 16:9
+   setting, drawing 16:9 into its usual frame for the TV to stretch.
 5. **The engine is not a general game engine.** *Decided.* No standalone export: experiences run
    inside workbench64, never as their own ROM or executable.
 6. **Untrusted content is validated on load.** *Decided.* Every `.wb64`, whatever its source, is
@@ -496,8 +499,8 @@ the same checks on every `.wb64`.
 
 *Decided:* anchored layout, no scaling.
 
-- UI positions itself by anchors (edges, centre) against the real screen: 320×240, or 256×192 on
-  DS. Lua can read the size.
+- UI positions itself by anchors (edges, centre) against the real screen: 240 high (192 on DS)
+  and as wide as its shape (§1.4). Lua can read the size.
 - Every UI must fit the **256×192 safe area**. Text is never scaled.
 - *Proposed* elements: Frame (colour or 9-slice image), Image, Text (wrapping, alignment), Button,
   List (stacks children), Bar (progress/health). Each has anchors, position, size, visibility and

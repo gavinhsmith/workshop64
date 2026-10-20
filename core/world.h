@@ -4,9 +4,20 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Every platform renders at this size (DS excepted) and scales up. */
+/* Every platform renders SCREEN_H lines (DS: 192) and scales up. The width follows the
+ * screen's shape at that height: SCREEN_W on a 4:3 screen, wider on wider ones (up to
+ * SCREEN_W_MAX), never narrower. The vertical field of view is the same everywhere, so a
+ * wider screen just sees more to the sides. */
 #define SCREEN_W 320
 #define SCREEN_H 240
+#define SCREEN_W_MAX 1024
+
+/* Rendering width for a w x h screen or window. */
+static inline int screen_width(int w, int h)
+{
+    int sw = h > 0 ? SCREEN_H * w / h : SCREEN_W;
+    return sw < SCREEN_W ? SCREEN_W : sw > SCREEN_W_MAX ? SCREEN_W_MAX : sw;
+}
 
 /* 16 colours, 4 bits per pixel, rows top to bottom, low nibble = left pixel.
  * TEXTURE_MIN..TEXTURE_MAX pixels per side, powers of two: 32x32 at 16 bits is 2 KB, which

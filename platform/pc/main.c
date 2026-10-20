@@ -5,8 +5,9 @@
 #include <string.h>
 #include "world.h"
 
-/* Power-of-two texture holding the 320x240 frame, so plain GL 1.1 works everywhere. */
-#define TEX_W 512
+/* Power-of-two texture holding the frame (SCREEN_H high, up to SCREEN_W_MAX wide), so plain
+ * GL 1.1 works everywhere. */
+#define TEX_W SCREEN_W_MAX
 #define TEX_H 256
 
 static place pl; /* the loaded place; mesh parts are drawn from it */
@@ -79,9 +80,10 @@ static void draw_mesh(const mesh *m)
     glDisable(GL_TEXTURE_2D);
 }
 
-static void draw_scene(const world *w, const view *v)
+/* Drawn sw x SCREEN_H in the corner of the back buffer, then scaled up by present(). */
+static void draw_scene(const world *w, const view *v, int sw)
 {
-    glViewport(0, 0, SCREEN_W, SCREEN_H);
+    glViewport(0, 0, sw, SCREEN_H);
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
@@ -89,7 +91,8 @@ static void draw_scene(const world *w, const view *v)
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    glFrustum(-0.1333, 0.1333, -0.1, 0.1, 0.2, 100.0);
+    double r = 0.1 * sw / SCREEN_H; /* same vertical view everywhere; wider sees more */
+    glFrustum(-r, r, -0.1, 0.1, 0.2, 100.0);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     glTranslatef(0.0f, 0.0f, -v->dist / 1000.0f);
@@ -119,19 +122,19 @@ static void draw_scene(const world *w, const view *v)
     }
 }
 
-/* Grab the 320x240 frame and draw it as big as fits (keeping 4:3, nearest-filtered),
- * centred, black bars on the sides that are left over. */
-static void present(SDL_Window *win, GLuint tex)
+/* Grab the sw x SCREEN_H frame and draw it as big as fits (nearest-filtered), centred. It
+ * matches the window's shape, so there are bars only past SCREEN_W_MAX wide or under 4:3. */
+static void present(SDL_Window *win, GLuint tex, int sw)
 {
     glBindTexture(GL_TEXTURE_2D, tex);
-    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, SCREEN_W, SCREEN_H);
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sw, SCREEN_H);
 
     int w, h;
     SDL_GetWindowSizeInPixels(win, &w, &h);
-    float scale = SDL_min((float)w / SCREEN_W, (float)h / SCREEN_H);
-    float x0 = (w - SCREEN_W * scale) / 2.0f, y0 = (h - SCREEN_H * scale) / 2.0f;
-    float x1 = x0 + SCREEN_W * scale, y1 = y0 + SCREEN_H * scale;
-    float u = (float)SCREEN_W / TEX_W, v = (float)SCREEN_H / TEX_H;
+    float scale = SDL_min((float)w / sw, (float)h / SCREEN_H);
+    float x0 = (w - sw * scale) / 2.0f, y0 = (h - SCREEN_H * scale) / 2.0f;
+    float x1 = x0 + sw * scale, y1 = y0 + SCREEN_H * scale;
+    float u = (float)sw / TEX_W, v = (float)SCREEN_H / TEX_H;
 
     glViewport(0, 0, w, h);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -204,8 +207,11 @@ int main(int argc, char **argv)
             w = world_update(w, in);
             cam = camera_update(cam, b, &w.players[0]);
         }
-        draw_scene(&w, &cam.now);
-        present(win, tex);
+        int pw, ph;
+        SDL_GetWindowSizeInPixels(win, &pw, &ph);
+        int sw = screen_width(pw, ph);
+        draw_scene(&w, &cam.now, sw);
+        present(win, tex, sw);
     }
 done:
     SDL_Quit();

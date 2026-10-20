@@ -58,7 +58,7 @@ static void upload_textures(void)
 static GXRModeObj mode;
 static void *xfb[2];
 static void *frame_tex;      /* the 320x240 frame, as an RGBA8 texture */
-static int quad_x, quad_w;   /* where the frame lands in the full-size EFB */
+static float aspect = 4.0f / 3.0f; /* of the TV picture */
 
 static const GXColor BG = {25, 25, 38, 255};
 static const GXColor BLACK = {0, 0, 0, 255};
@@ -118,14 +118,12 @@ static void video_init(void)
     GX_SetNumTevStages(1);
 
     frame_tex = memalign(32, GX_GetTexBufferSize(SCREEN_W, SCREEN_H, GX_TF_RGBA8, GX_FALSE, 0));
-    quad_x = 0;
-    quad_w = mode.fbWidth;
 #ifdef HW_RVL
-    /* Wii set to 16:9: the TV stretches the picture, so draw it 3/4 wide to stay 4:3. */
-    if (CONF_GetAspectRatio() == CONF_ASPECT_16_9) {
-        quad_w = mode.fbWidth * 3 / 4;
-        quad_x = (mode.fbWidth - quad_w) / 2;
-    }
+    /* Wii set to 16:9: the TV stretches the picture to widescreen, so draw a wider view into
+     * the same frame (each pixel ends up wider than tall). The height, and so the vertical
+     * view, stays the same as in 4:3. */
+    if (CONF_GetAspectRatio() == CONF_ASPECT_16_9)
+        aspect = 16.0f / 9.0f;
 #endif
     clear_scene_area();
 }
@@ -168,7 +166,7 @@ static void draw_scene(const world *w, const view *v)
     GX_SetViewport(0, 0, SCREEN_W, SCREEN_H, 0, 1);
     GX_SetScissor(0, 0, SCREEN_W, SCREEN_H);
     Mtx44 proj;
-    guPerspective(proj, 53.0f, 4.0f / 3.0f, 0.2f, 100.0f);
+    guPerspective(proj, 53.0f, aspect, 0.2f, 100.0f);
     GX_LoadProjectionMtx(proj, GX_PERSPECTIVE);
 
     GX_ClearVtxDesc();
@@ -216,7 +214,7 @@ static void draw_upscaled(void)
 {
     GX_SetTexCopySrc(0, 0, SCREEN_W, SCREEN_H);
     GX_SetTexCopyDst(SCREEN_W, SCREEN_H, GX_TF_RGBA8, GX_FALSE);
-    GX_CopyTex(frame_tex, GX_TRUE); /* clear to black: it's under the bars when 16:9 */
+    GX_CopyTex(frame_tex, GX_TRUE);
     GX_PixModeSync();
     GX_InvalidateTexAll();
 
@@ -243,7 +241,7 @@ static void draw_upscaled(void)
     GX_SetTevOp(GX_TEVSTAGE0, GX_REPLACE);
     GX_SetZMode(GX_FALSE, GX_ALWAYS, GX_FALSE);
 
-    f32 x0 = quad_x, x1 = quad_x + quad_w, y1 = mode.efbHeight;
+    f32 x0 = 0, x1 = mode.fbWidth, y1 = mode.efbHeight;
     GX_Begin(GX_QUADS, GX_VTXFMT1, 4);
     GX_Position3f32(x0, 0, -0.5f); GX_TexCoord2f32(0, 0);
     GX_Position3f32(x1, 0, -0.5f); GX_TexCoord2f32(1, 0);

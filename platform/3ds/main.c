@@ -182,7 +182,8 @@ int main(void)
     C3D_CullFace(GPU_CULL_NONE);
 
     C3D_Mtx proj, identity;
-    Mtx_PerspTilt(&proj, C3D_AngleFromDegrees(53.0f), 4.0f / 3.0f, 0.2f, 100.0f, false);
+    /* Same vertical view as every platform; the wide top screen sees more to the sides. */
+    Mtx_PerspTilt(&proj, C3D_AngleFromDegrees(53.0f), 400.0f / SCREEN_H, 0.2f, 100.0f, false);
     Mtx_Identity(&identity);
 
     ticker tk = {0};
@@ -209,8 +210,8 @@ int main(void)
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
         C3D_RenderTargetClear(top, C3D_CLEAR_ALL, 0x000000FF, 0);
         C3D_FrameDrawOn(top);
-        /* Pillarbox: the middle 320 of the 400 columns (y in the rotated framebuffer). */
-        C3D_SetViewport(0, (400 - SCREEN_W) / 2, SCREEN_H, SCREEN_W);
+        /* The whole 400x240 screen (240x400 in the rotated framebuffer). */
+        C3D_SetViewport(0, 0, SCREEN_H, 400);
 
         C3D_DepthTest(false, GPU_ALWAYS, GPU_WRITE_COLOR);
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, u_proj, &identity);

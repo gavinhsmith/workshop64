@@ -1,7 +1,7 @@
 # hangout64
 Multi-platform demo for a simple 3D homebrew title for Nintendo 64 and beyond.
 
-Currently a little guy walking around a checkered floor with a few parts to climb, rendered at 320x240 everywhere (DS: native 256x192) and scaled up.
+Currently a little guy walking around a checkered floor with a few parts to climb, rendered 240 lines high everywhere (DS: native 256x192) and scaled up; wider screens show a wider view (3DS, Wii in 16:9, PC and web at any window shape).
 
 This is the prototype for **workbench64**, a small Roblox-like platform; see the
 [engine specification](docs/engine.md) for where it's going.
@@ -37,8 +37,9 @@ zoom ease too. Walk one way for a moment and the camera slowly swings round behi
 
 On the Wii a GameCube pad works too, with the GameCube layout.
 
-On PC, F11 toggles fullscreen. The window can be any size: the picture is scaled to fill it,
-keeping 4:3.
+On PC, F11 toggles fullscreen. The window can be any size: the picture is drawn 240 lines high
+and as wide as the window's shape (4:3 or wider), then scaled to fill it. The web build does the
+same with the browser window.
 
 ## Building
 

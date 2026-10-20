@@ -1,5 +1,6 @@
-/* Browser port: SDL3 for the window and keys, WebGL (GLES 2) to draw. The scene is drawn at
- * 320x240 into an offscreen buffer, then scaled up nearest-neighbour to fill the page at 4:3. */
+/* Browser port: SDL3 for the window and keys, WebGL (GLES 2) to draw. The scene is drawn
+ * SCREEN_H high, as wide as the page's shape (see screen_width), into an offscreen buffer,
+ * then scaled up nearest-neighbour to fill the page. */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <GLES2/gl2.h>
@@ -24,7 +25,8 @@ typedef struct {
 } gpu_mesh;
 
 static gpu_mesh gpu_level, gpu_place[PLACE_MAX_MESHES], gpu_avatars[MAX_PLAYERS];
-static GLuint frame_fbo, frame_tex, quad_vbo;
+static GLuint frame_fbo, frame_tex, frame_depth, quad_vbo;
+static int frame_w; /* the frame's current width */
 
 static gpu_mesh upload_mesh(const mesh *m)
 {
@@ -152,11 +154,12 @@ static void draw_mesh(const gpu_mesh *g, const float *mvp)
 /* Same transforms as the PC port's draw_scene (see view in world.h). */
 static void draw_scene(const world *w, const view *v)
 {
-    glViewport(0, 0, SCREEN_W, SCREEN_H);
+    glViewport(0, 0, frame_w, SCREEN_H);
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    const float n = 0.2f, f = 100.0f, r = 0.1333f, t = 0.1f; /* glFrustum(-r, r, -t, t, n, f) */
+    /* glFrustum(-r, r, -t, t, n, f): same vertical view everywhere; wider sees more. */
+    const float n = 0.2f, f = 100.0f, t = 0.1f, r = t * frame_w / SCREEN_H;
     float cam[16] = {n / r, 0, 0, 0, 0, n / t, 0, 0, 0, 0, -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0};
     translate(cam, 0, 0, -v->dist / 1000.0f);
     rotate_x(cam, v->pitch);
@@ -184,24 +187,34 @@ static void draw_scene(const world *w, const view *v)
     }
 }
 
-/* The 320x240 frame the scene is drawn into, and a quad covering the screen to show it. */
+/* Give the frame this width (it's SCREEN_H high); called when the page changes shape. */
+static void size_frame(int w)
+{
+    if (w == frame_w)
+        return;
+    frame_w = w;
+    glBindTexture(GL_TEXTURE_2D, frame_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, SCREEN_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindRenderbuffer(GL_RENDERBUFFER, frame_depth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, w, SCREEN_H);
+}
+
+/* The frame the scene is drawn into, and a quad covering the screen to show it. */
 static void setup_frame(void)
 {
     glGenTextures(1, &frame_tex);
     glBindTexture(GL_TEXTURE_2D, frame_tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCREEN_W, SCREEN_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); /* needed for 320x240 in WebGL 1 */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); /* needed for odd sizes in WebGL 1 */
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    GLuint depth;
-    glGenRenderbuffers(1, &depth);
-    glBindRenderbuffer(GL_RENDERBUFFER, depth);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, SCREEN_W, SCREEN_H);
+    glGenRenderbuffers(1, &frame_depth);
+    size_frame(SCREEN_W);
     glGenFramebuffers(1, &frame_fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, frame_fbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frame_tex, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, frame_depth);
 
     static const vertex quad[6] = {
         {-256, -256, 0, 0, 0, 255, 255, 255}, {256, -256, 0, 256, 0, 255, 255, 255}, {256, 256, 0, 256, 256, 255, 255, 255},
@@ -212,13 +225,14 @@ static void setup_frame(void)
     glBufferData(GL_ARRAY_BUFFER, sizeof quad, quad, GL_STATIC_DRAW);
 }
 
-/* Draw the frame as big as fits (keeping 4:3), centred, black bars on the sides left over. */
+/* Draw the frame as big as fits, centred. It matches the page's shape, so there are bars only
+ * past SCREEN_W_MAX wide or under 4:3. */
 static void present(SDL_Window *win)
 {
     int w, h;
     SDL_GetWindowSizeInPixels(win, &w, &h);
-    float scale = SDL_min((float)w / SCREEN_W, (float)h / SCREEN_H);
-    int vw = (int)(SCREEN_W * scale), vh = (int)(SCREEN_H * scale);
+    float scale = SDL_min((float)w / frame_w, (float)h / SCREEN_H);
+    int vw = (int)(frame_w * scale), vh = (int)(SCREEN_H * scale);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -276,6 +290,9 @@ static void frame(void)
         w = world_update(w, in);
         cam = camera_update(cam, b, &w.players[0]);
     }
+    int pw, ph;
+    SDL_GetWindowSizeInPixels(win, &pw, &ph);
+    size_frame(screen_width(pw, ph));
     draw_scene(&w, &cam.now);
     present(win);
     SDL_GL_SwapWindow(win);
