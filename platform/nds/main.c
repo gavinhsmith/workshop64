@@ -142,8 +142,8 @@ int main(void)
         /* Mesh parts: the model's origin sits at the part's bottom centre. */
         for (int i = 0; i < pl.part_count; i++) {
             const part *q = &pl.parts[i];
-            if (q->mesh < 0)
-                continue;
+            if (q->mesh < 0 || !part_visible(&cam.now, 256, 192, q, &pl.meshes[q->mesh]))
+                continue; /* a box (in the level mesh), or off screen */
             glPushMatrix();
             glTranslatef32(f32m(q->x), inttof32(FLOOR_Y) + f32m(q->y - q->sy / 2), f32m(q->z));
             draw_mesh(&pl.meshes[q->mesh]);
@@ -151,7 +151,7 @@ int main(void)
         }
 
         for (int i = 0; i < w.player_count; i++) {
-            if (camera_hides(&cam, i))
+            if (camera_hides(&cam, i) || !player_visible(&cam.now, 256, 192, &w.players[i]))
                 continue;
             const player *p = &w.players[i];
             glPushMatrix();

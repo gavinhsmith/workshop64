@@ -233,7 +233,7 @@ int main(void)
         C3D_DepthTest(true, GPU_GREATER, GPU_WRITE_ALL);
         C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, u_proj, &proj);
         for (int i = 0; i < w.player_count; i++) {
-            if (camera_hides(&cam, i))
+            if (camera_hides(&cam, i) || !player_visible(&cam.now, 400, SCREEN_H, &w.players[i]))
                 continue;
             const player *p = &w.players[i];
             C3D_Mtx m;
@@ -260,8 +260,8 @@ int main(void)
         /* Mesh parts: the model's origin sits at the part's bottom centre. */
         for (int i = 0; i < pl.part_count; i++) {
             const part *q = &pl.parts[i];
-            if (q->mesh < 0)
-                continue;
+            if (q->mesh < 0 || !part_visible(&cam.now, 400, SCREEN_H, q, &pl.meshes[q->mesh]))
+                continue; /* a box (in the level mesh), or off screen */
             C3D_Mtx m;
             Mtx_Copy(&m, &view);
             Mtx_Translate(&m, q->x / 1000.0f, FLOOR_Y + (q->y - q->sy / 2) / 1000.0f, q->z / 1000.0f, true);

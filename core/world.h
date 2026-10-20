@@ -47,6 +47,7 @@ typedef struct {
     int tris;
     const int16_t (*uvs)[2];    /* tris * 3 corners, or NULL when untextured */
     texture *texture;           /* NULL when untextured */
+    int radius;                 /* thousandths: no corner is further from the origin (for culling) */
 } mesh;
 
 #define FLOOR_TILES 10 /* per side, 2 units each, centred on the origin */
@@ -264,6 +265,15 @@ camera camera_update(camera c, input in, const world *w);
 /* Whether a platform should leave this player out: the camera is looking from their eyes. */
 int camera_hides(const camera *c, int player);
 
+/* Frustum culling: whether something might be on screen in view v, on a screen shaped
+ * aspect_w:aspect_h. Only says no when it's surely off screen (behind the camera, past the
+ * far plane or beyond an edge), so nothing pops at the edges. view_sees takes a sphere in
+ * view coordinates (thousandths; y includes FLOOR_Y); the others are the spheres around a
+ * player's avatar and around a model part's model. */
+int view_sees(const view *v, int aspect_w, int aspect_h, int x, int y, int z, int r);
+int player_visible(const view *v, int aspect_w, int aspect_h, const player *p);
+int part_visible(const view *v, int aspect_w, int aspect_h, const part *q, const mesh *m);
+
 /* A pointer's movement over one tick (pixels, right and down positive) as a look stick:
  * MOUSE_FULL pixels or more is pushed all the way that way, less is pushed part way. Like a
  * stick, a mouse never turns the camera faster than full speed. */
@@ -274,6 +284,8 @@ void look_from_motion(int dx, int dy, int *look_x, int *look_y);
  * from the x axis toward y, in tenths of a degree (-1800..1800); square root. */
 int isin(int deg);
 int icos(int deg);
+int isin10(int tenths); /* the same for tenths of a degree */
+int icos10(int tenths);
 int iatan2(int y, int x);
 long long isqrt(long long v);
 

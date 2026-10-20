@@ -658,7 +658,7 @@ What the prototype already has, and what changes:
 | World | Fixed 20×20 floor + up to 256 unrotated box parts | Parts only, baseplate as a part, wedges, 45° rotation, scene settings |
 | Content | `experiences/course/` (§11.6) packed into a `.ws64` with logic, canonical textures and models; built in. Scenes take parts, groups and a fixed camera spot (no rotation, wedges or other scene settings yet); one scene per experience | Variants, sessions with several scenes, the rest of §11.6 |
 | Assets | OBJ models, 16-colour PNG textures converted on load | Canonical forms + tool-made variants; collision in models |
-| Rendering | Each `main.c` draws the level itself | Core draw list; ports render it their own way |
+| Rendering | Each `main.c` draws the level itself; back faces are culled everywhere, and avatars and models off screen are skipped (`view_sees`); the level is one mesh, drawn whole | Core draw list; ports render it their own way |
 | Timing | Fixed 30 Hz tick on every platform (`ticker_due` in the core); drawn at display rate without interpolation | Keep; interpolate where a port can afford it |
 | Avatar | 146-triangle low-poly cartoon figure (square head, dress body, two-section box limbs bending at elbows and knees), animated as whole parts (§9.1: idle, walk, run, jump, fall, eased between), coat-coloured dress | Count it against the budget; customisation as data |
 | Scripting | Lua 5.4.9 (submodule, 32-bit numbers, no standard libraries) reads the logic files with memory and instruction caps; scripts don't run yet | §7 |

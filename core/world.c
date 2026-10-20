@@ -135,6 +135,50 @@ int icos(int deg)
     return isin(deg + 90);
 }
 
+int isin10(int t)
+{
+    t = (t % 3600 + 3600) % 3600;
+    int d = t / 10;
+    return isin(d) + (isin(d + 1) - isin(d)) * (t % 10) / 10;
+}
+
+int icos10(int t)
+{
+    return isin10(t + 900);
+}
+
+int view_sees(const view *v, int aspect_w, int aspect_h, int x, int y, int z, int r)
+{
+    /* Into the camera's space as the platforms draw it: translate(0, 0, -dist) rotateX(pitch)
+     * rotateY(-yaw) translate(-look). It looks along -Z. */
+    long long dx = x - v->x, dy = y - v->y, dz = z - v->z;
+    long long sy = isin10(-v->yaw), cy = icos10(-v->yaw), sp = isin10(v->pitch), cp = icos10(v->pitch);
+    long long cx = (dx * cy + dz * sy) / 4096, z1 = (-dx * sy + dz * cy) / 4096;
+    long long cyy = (dy * cp - z1 * sp) / 4096, depth = v->dist - (dy * sp + z1 * cp) / 4096;
+    long long slack = r + r / 8 + 50 + llabs(depth) / 128; /* integer sin/cos are only close */
+    /* The frustum: near 0.2, far 100, and edges at 0.5 up and 0.5 x aspect across per unit
+     * of depth (glFrustum(-r, r, -0.1, 0.1, 0.2, 100)). A sphere is out past a plane if its
+     * centre is more than its radius beyond it: radius x sqrt(1 + slope^2) measured across. */
+    if (depth + slack < 200 || depth - slack > 100000)
+        return 0;
+    if (2 * llabs(cyy) > depth + slack * 2237 / 1000) /* sqrt(1 + 0.5^2) x 2 */
+        return 0;
+    long long sec = isqrt(4LL * aspect_h * aspect_h + (long long)aspect_w * aspect_w);
+    return 2LL * aspect_h * llabs(cx) <= depth * aspect_w + slack * sec;
+}
+
+int player_visible(const view *v, int aspect_w, int aspect_h, const player *p)
+{
+    /* The avatar, arms and all, within a sphere around the middle of the player's height. */
+    return view_sees(v, aspect_w, aspect_h, p->x, FLOOR_Y * 1000 + p->y + PLAYER_HEIGHT / 2, p->z, PLAYER_HEIGHT * 3 / 4);
+}
+
+int part_visible(const view *v, int aspect_w, int aspect_h, const part *q, const mesh *m)
+{
+    /* A model sits with its origin at the part's bottom centre. */
+    return view_sees(v, aspect_w, aspect_h, q->x, FLOOR_Y * 1000 + q->y - q->sy / 2, q->z, m->radius);
+}
+
 /* Move cur 1/rate of the way to target, at least 1 so it always arrives. */
 static int ease(int cur, int target, int rate)
 {

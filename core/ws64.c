@@ -162,6 +162,12 @@ static int load_mesh(const place *pl, mesh *m, const uint8_t *d, uint32_t len)
         }
         memcpy(colors[t], td + 6, 3);
     }
+    long long far = 0; /* the corner furthest from the origin, for culling */
+    for (uint32_t i = 0; i < nt * 3; i++) {
+        long long d = (long long)verts[i][0] * verts[i][0] + (long long)verts[i][1] * verts[i][1] + (long long)verts[i][2] * verts[i][2];
+        far = d > far ? d : far;
+    }
+    m->radius = (int)(isqrt(far) * 1000 / MESH_ONE) + 1;
     return PLACE_OK;
 }
 

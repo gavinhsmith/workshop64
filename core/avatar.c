@@ -70,19 +70,6 @@ static int16_t face_uvs[PART_TRIS * 3][2];
 static uint8_t colors[MAX_PLAYERS][AVATAR_PARTS][PART_TRIS][3];
 mesh avatar_parts[MAX_PLAYERS][AVATAR_PARTS];
 
-/* sin and cos of t tenths of a degree, scaled by 4096. */
-static int sin10(int t)
-{
-    t = (t % 3600 + 3600) % 3600;
-    int d = t / 10;
-    return isin(d) + (isin(d + 1) - isin(d)) * (t % 10) / 10;
-}
-
-static int cos10(int t)
-{
-    return sin10(t + 900);
-}
-
 /* One triangle (corners in thousandths from the feet) into part k, turned to face away from
  * `inside` (a point inside its shape: platforms cull triangles seen from behind), and
  * flat-shaded by how much it faces a fixed light so the shape reads without lighting. */
@@ -129,9 +116,9 @@ static void add_ellipsoid(int k, const int c[3], const int r[3], int segs, int t
             for (int i = 0; i < 4; i++) {
                 int la = lat[b + (i >> 1)], lo = turn + (s + (i & 1)) * 3600 / segs;
                 int ring = icos(la);
-                p[i][0] = c[0] + r[0] * ring / 4096 * sin10(lo) / 4096;
+                p[i][0] = c[0] + r[0] * ring / 4096 * isin10(lo) / 4096;
                 p[i][1] = c[1] + r[1] * isin(la) / 4096;
-                p[i][2] = c[2] - r[2] * ring / 4096 * cos10(lo) / 4096;
+                p[i][2] = c[2] - r[2] * ring / 4096 * icos10(lo) / 4096;
             }
             if (lat[b] == -90)
                 add_tri(k, p[0], p[3], p[2], band_mat[b], c);
@@ -150,10 +137,10 @@ static void add_frustum(int k, const int bot[3], const int rb[2], const int top[
     for (int s = 0; s < 8; s++) {
         int a0 = 225 + s * 450, a1 = a0 + 450; /* flat faces front */
         int p[4][3] = {
-            {bot[0] + rb[0] * sin10(a0) / 4096, bot[1], bot[2] - rb[1] * cos10(a0) / 4096},
-            {bot[0] + rb[0] * sin10(a1) / 4096, bot[1], bot[2] - rb[1] * cos10(a1) / 4096},
-            {top[0] + rt[0] * sin10(a1) / 4096, top[1], top[2] - rt[1] * cos10(a1) / 4096},
-            {top[0] + rt[0] * sin10(a0) / 4096, top[1], top[2] - rt[1] * cos10(a0) / 4096},
+            {bot[0] + rb[0] * isin10(a0) / 4096, bot[1], bot[2] - rb[1] * icos10(a0) / 4096},
+            {bot[0] + rb[0] * isin10(a1) / 4096, bot[1], bot[2] - rb[1] * icos10(a1) / 4096},
+            {top[0] + rt[0] * isin10(a1) / 4096, top[1], top[2] - rt[1] * icos10(a1) / 4096},
+            {top[0] + rt[0] * isin10(a0) / 4096, top[1], top[2] - rt[1] * icos10(a0) / 4096},
         };
         const int mid[3] = {(bot[0] + top[0]) / 2, (bot[1] + top[1]) / 2, (bot[2] + top[2]) / 2};
         add_quad(k, p[0], p[1], p[2], p[3], mat, mid);
@@ -257,7 +244,8 @@ void avatar_build(int i, const uint8_t coat[3])
                 colors[i][k][t][a] = (uint8_t)(rgb[a] * shades[k][t] / 100);
         }
         int face = k == AVATAR_FACE;
-        avatar_parts[i][k] = (mesh){verts[k], colors[i][k], tris[k], face ? face_uvs : NULL, face ? &avatar_texture : NULL};
+        /* radius 0: avatars are culled whole, by player_visible */
+        avatar_parts[i][k] = (mesh){verts[k], colors[i][k], tris[k], face ? face_uvs : NULL, face ? &avatar_texture : NULL, 0};
     }
 }
 
@@ -356,7 +344,7 @@ void avatar_place(const pose *p, int k, int at[3], int *angle)
     /* Turn the joint about the parent's joint by the parent's swing (about X, like the
      * platforms' rotateX). */
     const int *pj = avatar_joints[parent];
-    int a = p->swing[parent], s = sin10(a), c = cos10(a);
+    int a = p->swing[parent], s = isin10(a), c = icos10(a);
     int dy = j[1] - pj[1], dz = j[2] - pj[2];
     at[0] = j[0];
     at[1] = pj[1] + (dy * c - dz * s) / 4096;

@@ -107,8 +107,8 @@ static void draw_scene(const world *w, const camera *cam, int sw)
     /* Mesh parts: the model's origin sits at the part's bottom centre. */
     for (int i = 0; i < pl.part_count; i++) {
         const part *q = &pl.parts[i];
-        if (q->mesh < 0)
-            continue;
+        if (q->mesh < 0 || !part_visible(v, sw, SCREEN_H, q, &pl.meshes[q->mesh]))
+            continue; /* a box (in the level mesh), or off screen */
         glPushMatrix();
         glTranslatef(q->x / 1000.0f, FLOOR_Y + (q->y - q->sy / 2) / 1000.0f, q->z / 1000.0f);
         draw_mesh(&pl.meshes[q->mesh]);
@@ -116,7 +116,7 @@ static void draw_scene(const world *w, const camera *cam, int sw)
     }
 
     for (int i = 0; i < w->player_count; i++) {
-        if (camera_hides(cam, i))
+        if (camera_hides(cam, i) || !player_visible(v, sw, SCREEN_H, &w->players[i]))
             continue;
         const player *p = &w->players[i];
         glPushMatrix();

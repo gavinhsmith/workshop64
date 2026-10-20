@@ -171,8 +171,8 @@ static void draw_scene(const world *w, const camera *c)
 
     for (int i = 0; i < pl.part_count; i++) {
         const part *q = &pl.parts[i];
-        if (q->mesh < 0)
-            continue;
+        if (q->mesh < 0 || !part_visible(v, frame_w, SCREEN_H, q, &pl.meshes[q->mesh]))
+            continue; /* a box (in the level mesh), or off screen */
         float m[16];
         memcpy(m, vp, sizeof m);
         translate(m, q->x / 1000.0f, FLOOR_Y + (q->y - q->sy / 2) / 1000.0f, q->z / 1000.0f);
@@ -180,7 +180,7 @@ static void draw_scene(const world *w, const camera *c)
     }
 
     for (int i = 0; i < w->player_count; i++) {
-        if (camera_hides(c, i))
+        if (camera_hides(c, i) || !player_visible(v, frame_w, SCREEN_H, &w->players[i]))
             continue;
         const player *p = &w->players[i];
         pose pz = player_pose(p);

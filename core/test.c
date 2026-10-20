@@ -1,5 +1,6 @@
 /* Host-side checks for core. Run with `make -C core test`. */
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -689,6 +690,36 @@ int main(void)
     ca.subject = (subject){SUBJECT_PART, 4, 0, 0, 0}; /* the ledge */
     ca = follow(ca, 0, &w, 200);
     assert(ca.now.x == pl.parts[4].x && ca.now.y == pl.parts[4].y + pl.parts[4].sy / 2 + CAM_FOCUS);
+
+    /* Frustum culling: never hides something on screen. Random cameras and points, checked
+     * against the platforms' projection worked out in floating point: every point that lands
+     * on screen must count as visible, and most that don't are culled. */
+    srand(64);
+    int on = 0, culled = 0, off = 0;
+    for (int i = 0; i < 20000; i++) {
+        view cv = {rand() % 20001 - 10000, rand() % 4001 - 1000, rand() % 20001 - 10000,
+                   rand() % 7201 - 3600, rand() % 1601 - 800, rand() % 2 ? 0 : rand() % 12000};
+        int aw = rand() % 2 ? 4 : 1024, ah = aw == 4 ? 3 : 240;
+        int px = rand() % 60001 - 30000, py = rand() % 8001 - 2000, pz = rand() % 60001 - 30000;
+        double yaw = -cv.yaw / 1800.0 * 3.14159265358979, pitch = cv.pitch / 1800.0 * 3.14159265358979;
+        double dx = px - cv.x, dy = py - cv.y, dz = pz - cv.z;
+        double x1 = dx * cos(yaw) + dz * sin(yaw), z1 = -dx * sin(yaw) + dz * cos(yaw);
+        double y2 = dy * cos(pitch) - z1 * sin(pitch), z2 = dy * sin(pitch) + z1 * cos(pitch) - cv.dist;
+        double depth = -z2;
+        int inside = depth > 200 && depth < 100000 && fabs(y2) < depth * 0.5 && fabs(x1) < depth * 0.5 * aw / ah;
+        int seen = view_sees(&cv, aw, ah, px, py, pz, 0);
+        assert(!inside || seen);
+        on += inside, off += !inside, culled += !inside && !seen;
+    }
+    assert(on > 100 && culled * 10 > off * 8);
+    view behind = camera_init().now;
+    assert(player_visible(&behind, 4, 3, &w.players[0])); /* the start: in view */
+    assert(!view_sees(&behind, 4, 3, 0, 0, 20000, 500) && !view_sees(&behind, 4, 3, 8000, 0, 0, 100));
+    assert(view_sees(&behind, 1024, 240, 8000, 0, 0, 100)); /* a wide screen sees further across */
+    /* A model's radius reaches its furthest corner: the statue is 2.4 tall, the unit crate
+     * half a unit out each way and a unit up. */
+    assert(pl.meshes[1].radius >= 2400 && pl.meshes[1].radius < 2700);
+    assert(abs(pl.meshes[0].radius - 1225) < 20);
 
     test_avatar(&w);
     test_text();
