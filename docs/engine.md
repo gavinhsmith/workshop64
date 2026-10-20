@@ -662,6 +662,7 @@ What the prototype already has, and what changes:
 | Timing | Fixed 30 Hz tick on every platform (`ticker_due` in the core); drawn at display rate without interpolation | Keep; interpolate where a port can afford it |
 | Avatar | 146-triangle low-poly cartoon figure (square head, dress body, two-section box limbs bending at elbows and knees), animated as whole parts (§9.1: idle, walk, run, jump, fall, eased between), coat-coloured dress | Count it against the budget; customisation as data |
 | Scripting | Lua 5.4.9 (submodule, 32-bit numbers, no standard libraries) reads the logic files with memory and instruction caps; scripts don't run yet | §7 |
+| Text, chat | The engine font (5x7, `assets/font.txt`, built into C); a local-only chat on PC and web (`/` to type, echoed as `TestPlayer: <msg>`) | §9.3, §11.5, §14.3 |
 | UI, audio, networking, saves | None | §14, §9.4, §10, §11.4 |
 
 Suggested order of work:

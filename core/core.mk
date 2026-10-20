@@ -9,8 +9,8 @@ GEN      := $(ROOT)/build/gen
 # python3, or python where python3 doesn't run (on Windows it's often the Store stub).
 PYTHON   ?= $(if $(shell python3 -c "print(1)" 2>/dev/null),python3,python)
 LUA      := $(ROOT)/third_party/lua
-CORE_SRC := world.c avatar.c ws64.c lua.c
-GEN_SRC  := builtin_experience.c
+CORE_SRC := world.c avatar.c text.c ws64.c lua.c
+GEN_SRC  := builtin_experience.c font.c
 CORE_OBJ := $(CORE_SRC:.c=.o) $(GEN_SRC:.c=.o)
 CORE_HDR := $(GEN)/lua32.h
 CORE_INC := -I$(CORE) -I$(GEN) -I$(LUA)
@@ -26,6 +26,10 @@ endif
 $(GEN)/builtin_experience.c: $(ROOT)/tools/ws64.py $(ROOT)/tools/objload.py $(ROOT)/tools/texload.py $(wildcard $(EXPERIENCE)/* $(EXPERIENCE)/*/* $(EXPERIENCE)/*/*/*)
 	@mkdir -p $(dir $@)
 	$(PYTHON) $< $(EXPERIENCE) $@ builtin_experience
+
+$(GEN)/font.c: $(ROOT)/tools/font2c.py $(ROOT)/assets/font.txt
+	@mkdir -p $(dir $@)
+	$(PYTHON) $< $(ROOT)/assets/font.txt $@
 
 $(GEN)/lua32.h: $(ROOT)/tools/lua32.py $(LUA)/luaconf.h
 	@mkdir -p $(dir $@)

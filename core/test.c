@@ -270,6 +270,52 @@ static void test_experience_loader(void)
 
 static int imax(int a, int b) { return a > b ? a : b; }
 
+static void count_rect(int x, int y, int w, int h, void *ctx)
+{
+    int *r = ctx; /* runs, lit pixels, then the first run's x, y, w */
+    if (!r[0]++)
+        r[2] = x, r[3] = y, r[4] = w;
+    r[1] += w * h;
+}
+
+/* Text: runs of lit pixels, glyphs FONT_ADVANCE apart, non-ASCII as '?'. Chat: "who: msg",
+ * printable only, wrapped to CHAT_COLS, the oldest lines scrolling off. */
+static void test_text(void)
+{
+    int r[5] = {0};
+    text_draw("-", 10, 20, count_rect, r);
+    assert(r[0] == 1 && r[1] == 5 && r[2] == 10 && r[3] == 23 && r[4] == 5); /* one row, middle */
+    int a[5] = {0}, b[5] = {0}, q[5] = {0};
+    text_draw("A", 0, 0, count_rect, a);
+    text_draw(" A", 0, 0, count_rect, b);
+    text_draw("", 0, 0, count_rect, q);
+    int qq[5] = {0};
+    text_draw("?", 0, 0, count_rect, qq);
+    assert(a[1] == b[1] && b[2] == a[2] + FONT_ADVANCE && q[1] == qq[1] && text_width("abc") == 3 * FONT_ADVANCE);
+    int all[5] = {0};
+    for (char c = ' '; c < '~'; c++) {
+        char str[2] = {c, 0};
+        text_draw(str, 0, 0, count_rect, all);
+    }
+    assert(all[1] > 95 * 5); /* every glyph drawn something (the space aside) */
+
+    chat_log log = {0};
+    chat_say(&log, "TestPlayer", "hiÃ©!", 7);
+    assert(log.count == 1 && strcmp(log.lines[0], "TestPlayer: hi!") == 0 && log.said[0] == 7);
+    char long_msg[100];
+    memset(long_msg, 'x', sizeof long_msg - 1);
+    long_msg[99] = 0;
+    chat_say(&log, "TestPlayer", long_msg, 8); /* cut to CHAT_MAX, then wrapped */
+    assert(log.count == 3 && strlen(log.lines[1]) == CHAT_COLS);
+    assert(strlen(log.lines[2]) == strlen("TestPlayer: ") + CHAT_MAX - CHAT_COLS);
+    chat_say(&log, "TestPlayer", "Hello, world! wasd moves nothing 123 and more", 9); /* breaks at a space */
+    assert(strcmp(log.lines[log.count - 2], "TestPlayer: Hello, world! wasd moves") == 0);
+    assert(strcmp(log.lines[log.count - 1], "nothing 123 and more") == 0);
+    for (int i = 0; i < 10; i++)
+        chat_say(&log, "TestPlayer", "again", 9 + i);
+    assert(log.count == CHAT_LINES && strcmp(log.lines[CHAT_LINES - 1], "TestPlayer: again") == 0 && log.said[CHAT_LINES - 1] == 18);
+}
+
 /* At most 160 triangles (four fit the DS's budget beside a full scene), from the feet to
  * within the player's height; only the face is textured; each player's shirt wears their coat. */
 static void test_avatar(const world *w)
@@ -614,6 +660,7 @@ int main(void)
     assert(ca.now.x == pl.parts[4].x && ca.now.y == pl.parts[4].y + pl.parts[4].sy / 2 + CAM_FOCUS);
 
     test_avatar(&w);
+    test_text();
 
     /* Level mesh: checkered floor at FLOOR_Y, then 10 triangles per box part (not the
      * 4 mesh parts), its top face first, drawn at the part's top. */

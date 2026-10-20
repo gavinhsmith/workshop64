@@ -5,6 +5,7 @@
 #include <SDL3/SDL_main.h>
 #include <GLES2/gl2.h>
 #include <emscripten.h>
+#include <stdio.h>
 #include <string.h>
 #include "world.h"
 
@@ -285,6 +286,110 @@ static unsigned read_input(void)
     return in;
 }
 
+/* --- Chat: / opens a line to type in; Enter says it, Esc cancels. Just echoed locally. ---- */
+
+static chat_log chat;
+static char draft[CHAT_MAX + 1];
+static int typing, skip_slash, ticks; /* skip_slash: the / that opened it may arrive as text */
+static vertex text_buf[6 * 4096];   /* this frame's text, two triangles per run of pixels */
+static int text_n;
+static GLuint text_vbo;
+
+static void text_rect(int x, int y, int w, int h, void *ctx)
+{
+    const uint8_t *c = ctx;
+    if (text_n + 6 > (int)SDL_arraysize(text_buf))
+        return;
+    const int16_t px[6][2] = {{x, y}, {x + w, y}, {x + w, y + h}, {x, y}, {x + w, y + h}, {x, y + h}};
+    for (int i = 0; i < 6; i++)
+        text_buf[text_n++] = (vertex){px[i][0], px[i][1], 0, 0, 0, c[0], c[1], c[2], 0};
+}
+
+/* White with a dark shadow, so it reads over anything. */
+static void draw_text(const char *s, int x, int y)
+{
+    static const uint8_t shadow[3] = {0, 0, 0}, white[3] = {255, 255, 255};
+    text_draw(s, x + 1, y + 1, text_rect, (void *)shadow);
+    text_draw(s, x, y, text_rect, (void *)white);
+}
+
+/* The chat in the bottom left of the UI safe area (256x192, centred), over the frame. */
+static void draw_chat(void)
+{
+    text_n = 0;
+    int x = (frame_w - 256) / 2 + 2, y = (SCREEN_H + 192) / 2 - 2 - FONT_H;
+    if (typing) {
+        char line[CHAT_COLS + 1];
+        const char *tail = draft + (strlen(draft) > CHAT_COLS - 3 ? strlen(draft) - (CHAT_COLS - 3) : 0);
+        snprintf(line, sizeof line, "> %s_", tail);
+        draw_text(line, x, y);
+        y -= FONT_LINE;
+    }
+    for (int i = chat.count - 1; i >= 0; i--, y -= FONT_LINE)
+        if (typing || ticks - chat.said[i] < CHAT_SHOW)
+            draw_text(chat.lines[i], x, y);
+    if (!text_n)
+        return;
+    /* Pixels, y down, onto the frame (the shader divides positions by 256). */
+    const float mvp[16] = {512.0f / frame_w, 0, 0, 0, 0, -512.0f / SCREEN_H, 0, 0, 0, 0, 1, 0, -1, 1, 0, 1};
+    glDisable(GL_DEPTH_TEST);
+    glUniformMatrix4fv(u_mvp, 1, GL_FALSE, mvp);
+    glUniform1f(u_textured, 0.0f);
+    if (!text_vbo)
+        glGenBuffers(1, &text_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, text_vbo);
+    glBufferData(GL_ARRAY_BUFFER, text_n * sizeof(vertex), text_buf, GL_STREAM_DRAW);
+    glVertexAttribPointer(0, 3, GL_SHORT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, x));
+    glVertexAttribPointer(1, 2, GL_SHORT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, u));
+    glVertexAttribPointer(2, 3, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), (void *)offsetof(vertex, r));
+    glDrawArrays(GL_TRIANGLES, 0, text_n);
+    glEnable(GL_DEPTH_TEST);
+}
+
+static void chat_close(SDL_Window *win)
+{
+    typing = 0;
+    SDL_StopTextInput(win);
+}
+
+/* Typing keys while the chat line is open; returns whether the event was the chat's. */
+static int chat_event(SDL_Window *win, const SDL_Event *e)
+{
+    if (!typing) {
+        if (e->type == SDL_EVENT_KEY_DOWN && e->key.key == SDLK_SLASH && !e->key.repeat) {
+            typing = skip_slash = 1;
+            draft[0] = '\0';
+            SDL_StartTextInput(win);
+            return 1;
+        }
+        return 0;
+    }
+    if (e->type == SDL_EVENT_TEXT_INPUT) {
+        const char *t = e->text.text;
+        if (skip_slash && *t == '/')
+            t++;
+        skip_slash = 0;
+        for (size_t n = strlen(draft); *t && n < CHAT_MAX; t++)
+            if (*t >= ' ' && *t <= '~')
+                draft[n++] = *t, draft[n] = '\0';
+        return 1;
+    }
+    if (e->type == SDL_EVENT_KEY_DOWN) {
+        skip_slash = 0;
+        if (e->key.key == SDLK_BACKSPACE && draft[0])
+            draft[strlen(draft) - 1] = '\0';
+        if (e->key.key == SDLK_RETURN || e->key.key == SDLK_KP_ENTER) {
+            if (draft[0])
+                chat_say(&chat, "TestPlayer", draft, ticks);
+            chat_close(win);
+        }
+        if (e->key.key == SDLK_ESCAPE)
+            chat_close(win);
+        return 1;
+    }
+    return 0;
+}
+
 static SDL_Window *win;
 static world w;
 static camera cam;
@@ -296,6 +401,8 @@ static void frame(void)
 {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
+        if (chat_event(win, &e))
+            continue;
         /* Clicking captures the mouse for the camera (pointer lock); the browser's Esc lets it go. */
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
             SDL_SetWindowRelativeMouseMode(win, true);
@@ -303,12 +410,14 @@ static void frame(void)
             mouse_x += e.motion.xrel, mouse_y += e.motion.yrel;
     }
     int n = ticker_due(&tk, SDL_GetTicksNS() / 1000);
-    unsigned b = read_input();
+    unsigned b = typing ? 0 : read_input(); /* typing doesn't move you */
     int look_x = 0, look_y = 0; /* the mouse moved since the last tick, spread over the ticks due */
     if (n) {
-        look_from_motion((int)(mouse_x / n), (int)(mouse_y / n), &look_x, &look_y);
+        if (!typing)
+            look_from_motion((int)(mouse_x / n), (int)(mouse_y / n), &look_x, &look_y);
         mouse_x = mouse_y = 0;
     }
+    ticks += n;
     for (; n > 0; n--) {
         input in[MAX_PLAYERS] = {{b, cam.now.yaw, look_x, look_y}};
         w = world_update(w, in);
@@ -318,6 +427,7 @@ static void frame(void)
     SDL_GetWindowSizeInPixels(win, &pw, &ph);
     size_frame(screen_width(pw, ph));
     draw_scene(&w, &cam);
+    draw_chat();
     present(win);
     SDL_GL_SwapWindow(win);
 }

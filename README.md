@@ -43,6 +43,9 @@ the camera button:
 
 On the Wii a GameCube pad works too, with the GameCube layout.
 
+On PC and web, `/` opens a chat line: type, Enter posts it (for now it just echoes as
+`TestPlayer: <msg>`, nobody else sees it), Esc cancels; the game ignores keys while it's open.
+
 On PC and web, click to capture the mouse for the camera; Esc lets it go (on PC, Esc again
 quits). The mouse works like the GameCube's C-stick: moving it a little turns the camera a
 little, and moving it fast turns it at full stick speed but never faster, so it's no faster

@@ -20,6 +20,10 @@ add_custom_command(OUTPUT ${GEN}/builtin_experience.c
     COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN}
     COMMAND Python3::Interpreter ${ROOT}/tools/ws64.py ${EXPERIENCE} ${GEN}/builtin_experience.c builtin_experience
     DEPENDS ${ROOT}/tools/ws64.py ${TOOLS} ${EXPERIENCE_FILES})
+add_custom_command(OUTPUT ${GEN}/font.c
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN}
+    COMMAND Python3::Interpreter ${ROOT}/tools/font2c.py ${ROOT}/assets/font.txt ${GEN}/font.c
+    DEPENDS ${ROOT}/tools/font2c.py ${ROOT}/assets/font.txt)
 add_custom_command(OUTPUT ${GEN}/lua32.h
     COMMAND ${CMAKE_COMMAND} -E make_directory ${GEN}
     COMMAND Python3::Interpreter ${ROOT}/tools/lua32.py ${LUA}/luaconf.h ${GEN}/lua32.h
@@ -39,8 +43,8 @@ if(WIN32)
     list(APPEND ICON_SRC ${CMAKE_BINARY_DIR}/workshop64.rc)
 endif()
 
-add_executable(workshop64 main.c ${ROOT}/core/world.c ${ROOT}/core/avatar.c ${ROOT}/core/ws64.c ${ROOT}/core/lua.c
-    ${GEN}/builtin_experience.c ${GEN}/lua32.h ${ICON_SRC})
+add_executable(workshop64 main.c ${ROOT}/core/world.c ${ROOT}/core/avatar.c ${ROOT}/core/text.c ${ROOT}/core/ws64.c
+    ${ROOT}/core/lua.c ${GEN}/builtin_experience.c ${GEN}/font.c ${GEN}/lua32.h ${ICON_SRC})
 target_include_directories(workshop64 PRIVATE ${ROOT}/core ${GEN} ${LUA})
 if(NOT WIN32)
     target_link_libraries(workshop64 PRIVATE m)

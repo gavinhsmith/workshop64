@@ -2,6 +2,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_opengl.h>
+#include <stdio.h>
 #include <string.h>
 #include "world.h"
 
@@ -170,6 +171,99 @@ static void present(SDL_Window *win, GLuint tex, int sw)
     SDL_GL_SwapWindow(win);
 }
 
+/* --- Chat: / opens a line to type in; Enter says it, Esc cancels. Just echoed locally. ---- */
+
+static chat_log chat;
+static char draft[CHAT_MAX + 1];
+static int typing, skip_slash, ticks; /* skip_slash: the / that opened it may arrive as text */
+
+static void text_rect(int x, int y, int w, int h, void *ctx)
+{
+    (void)ctx;
+    glVertex2i(x, y);
+    glVertex2i(x + w, y);
+    glVertex2i(x + w, y + h);
+    glVertex2i(x, y + h);
+}
+
+/* White with a dark shadow, so it reads over anything. */
+static void draw_text(const char *s, int x, int y)
+{
+    glBegin(GL_QUADS);
+    glColor3ub(0, 0, 0);
+    text_draw(s, x + 1, y + 1, text_rect, NULL);
+    glColor3ub(255, 255, 255);
+    text_draw(s, x, y, text_rect, NULL);
+    glEnd();
+}
+
+/* The chat in the bottom left of the UI safe area (256x192, centred), over the frame. */
+static void draw_chat(int sw)
+{
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, sw, SCREEN_H, 0, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_TEXTURE_2D);
+    int x = (sw - 256) / 2 + 2, y = (SCREEN_H + 192) / 2 - 2 - FONT_H;
+    if (typing) {
+        char line[CHAT_COLS + 1];
+        const char *tail = draft + (strlen(draft) > CHAT_COLS - 3 ? strlen(draft) - (CHAT_COLS - 3) : 0);
+        snprintf(line, sizeof line, "> %s_", tail);
+        draw_text(line, x, y);
+        y -= FONT_LINE;
+    }
+    for (int i = chat.count - 1; i >= 0; i--, y -= FONT_LINE)
+        if (typing || ticks - chat.said[i] < CHAT_SHOW)
+            draw_text(chat.lines[i], x, y);
+}
+
+static void chat_close(SDL_Window *win)
+{
+    typing = 0;
+    SDL_StopTextInput(win);
+}
+
+/* Typing keys while the chat line is open; returns whether the event was the chat's. */
+static int chat_event(SDL_Window *win, const SDL_Event *e)
+{
+    if (!typing) {
+        if (e->type == SDL_EVENT_KEY_DOWN && e->key.key == SDLK_SLASH && !e->key.repeat) {
+            typing = skip_slash = 1;
+            draft[0] = '\0';
+            SDL_StartTextInput(win);
+            return 1;
+        }
+        return 0;
+    }
+    if (e->type == SDL_EVENT_TEXT_INPUT) {
+        const char *t = e->text.text;
+        if (skip_slash && *t == '/')
+            t++;
+        skip_slash = 0;
+        for (size_t n = strlen(draft); *t && n < CHAT_MAX; t++)
+            if (*t >= ' ' && *t <= '~')
+                draft[n++] = *t, draft[n] = '\0';
+        return 1;
+    }
+    if (e->type == SDL_EVENT_KEY_DOWN) {
+        skip_slash = 0;
+        if (e->key.key == SDLK_BACKSPACE && draft[0])
+            draft[strlen(draft) - 1] = '\0';
+        if (e->key.key == SDLK_RETURN || e->key.key == SDLK_KP_ENTER) {
+            if (draft[0])
+                chat_say(&chat, "TestPlayer", draft, ticks);
+            chat_close(win);
+        }
+        if (e->key.key == SDLK_ESCAPE)
+            chat_close(win);
+        return 1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     (void)argc;
@@ -217,6 +311,8 @@ int main(int argc, char **argv)
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_EVENT_QUIT)
                 goto done;
+            if (chat_event(win, &e))
+                continue;
             /* Clicking captures the mouse for the camera; Esc lets it go, and quits if it's free. */
             if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
                 SDL_SetWindowRelativeMouseMode(win, true);
@@ -231,12 +327,14 @@ int main(int argc, char **argv)
                 SDL_SetWindowFullscreen(win, !(SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN));
         }
         int n = ticker_due(&tk, SDL_GetTicksNS() / 1000);
-        unsigned b = read_input();
+        unsigned b = typing ? 0 : read_input(); /* typing doesn't move you */
         int look_x = 0, look_y = 0; /* the mouse moved since the last tick, spread over the ticks due */
         if (n) {
-            look_from_motion((int)(mouse_x / n), (int)(mouse_y / n), &look_x, &look_y);
+            if (!typing)
+                look_from_motion((int)(mouse_x / n), (int)(mouse_y / n), &look_x, &look_y);
             mouse_x = mouse_y = 0;
         }
+        ticks += n;
         for (; n > 0; n--) {
             input in[MAX_PLAYERS] = {{b, cam.now.yaw, look_x, look_y}};
             w = world_update(w, in);
@@ -246,6 +344,7 @@ int main(int argc, char **argv)
         SDL_GetWindowSizeInPixels(win, &pw, &ph);
         int sw = screen_width(pw, ph);
         draw_scene(&w, &cam, sw);
+        draw_chat(sw);
         present(win, tex, sw);
     }
 done:

@@ -277,4 +277,29 @@ int icos(int deg);
 int iatan2(int y, int x);
 long long isqrt(long long v);
 
+/* Text in the engine font (assets/font.txt): printable ASCII (anything else draws as '?'),
+ * FONT_W x FONT_H pixels, FONT_ADVANCE apart, lines FONT_LINE apart. text_draw calls `rect`
+ * for each run of lit pixels, in screen pixels from x, y (the top left, y down). */
+#define FONT_W 5
+#define FONT_H 7
+#define FONT_ADVANCE 6
+#define FONT_LINE 9
+int text_width(const char *s);
+void text_draw(const char *s, int x, int y, void (*rect)(int x, int y, int w, int h, void *ctx), void *ctx);
+
+/* A basic chat log (for now just local, on PC and web): the last CHAT_LINES lines, wrapped
+ * CHAT_COLS across to fit the UI safe area, each with the tick it was said. */
+#define CHAT_LINES 6
+#define CHAT_COLS (256 / FONT_ADVANCE)
+#define CHAT_MAX 64            /* characters in a message */
+#define CHAT_SHOW (10 * TICK_HZ) /* how long a line stays up */
+typedef struct {
+    char lines[CHAT_LINES][CHAT_COLS + 1]; /* oldest first */
+    int said[CHAT_LINES];
+    int count;
+} chat_log;
+
+/* Add "who: msg" (printable ASCII only, the message cut to CHAT_MAX characters). */
+void chat_say(chat_log *log, const char *who, const char *msg, int now);
+
 #endif
