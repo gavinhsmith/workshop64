@@ -158,6 +158,7 @@ static void draw_scene(const world *w, const camera *c)
     glViewport(0, 0, frame_w, SCREEN_H);
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_CULL_FACE); /* triangles seen from behind (meshes are counter-clockwise from outside) are never drawn */
 
     /* glFrustum(-r, r, -t, t, n, f): same vertical view everywhere; wider sees more. */
     const float n = 0.2f, f = 100.0f, t = 0.1f, r = t * frame_w / SCREEN_H;
@@ -247,6 +248,7 @@ static void present(SDL_Window *win)
     int vw = (int)(frame_w * scale), vh = (int)(SCREEN_H * scale);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDisable(GL_CULL_FACE);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     glViewport((w - vw) / 2, (h - vh) / 2, vw, vh);
@@ -316,6 +318,7 @@ static void draw_text(const char *s, int x, int y)
 /* The chat in the bottom left of the UI safe area (256x192, centred), over the frame. */
 static void draw_chat(void)
 {
+    glDisable(GL_CULL_FACE); /* y runs down here, which turns quads over */
     text_n = 0;
     int x = (frame_w - 256) / 2 + 2, y = (SCREEN_H + 192) / 2 - 2 - FONT_H;
     if (typing) {

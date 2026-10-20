@@ -23,10 +23,25 @@ mesh level_mesh = {.verts = level_verts, .colors = level_colors};
 #define BEHIND_SPEED 10 /* tenths of a degree per tick: 30 degrees a second */
 #define TICK_CATCHUP 4  /* most ticks run at once to catch up; time beyond that is dropped */
 
-/* Append a quad (corners in order) as two triangles. Coordinates in thousandths. */
-static int add_quad(int t, const int c[4][3], const uint8_t color[3], int shade)
+/* Whether triangle a, b, c turns counter-clockwise seen from outside, `inside` being a point
+ * inside the shape: the platforms cull triangles seen from behind. */
+static int faces_out(const int *a, const int *b, const int *c, const int *inside)
 {
-    static const int corner[6] = {0, 1, 2, 0, 2, 3};
+    long long u[3], v[3], m[3];
+    for (int i = 0; i < 3; i++) {
+        u[i] = b[i] - a[i];
+        v[i] = c[i] - a[i];
+        m[i] = (a[i] + b[i] + c[i]) / 3 - inside[i];
+    }
+    return (u[1] * v[2] - u[2] * v[1]) * m[0] + (u[2] * v[0] - u[0] * v[2]) * m[1] + (u[0] * v[1] - u[1] * v[0]) * m[2] > 0;
+}
+
+/* Append a quad (corners in order round its edge) as two triangles facing away from
+ * `inside`. Coordinates in thousandths. */
+static int add_quad(int t, const int c[4][3], const int inside[3], const uint8_t color[3], int shade)
+{
+    static const int forward[6] = {0, 1, 2, 0, 2, 3}, backward[6] = {0, 2, 1, 0, 3, 2};
+    const int *corner = faces_out(c[0], c[1], c[2], inside) ? forward : backward;
     for (int k = 0; k < 6; k++)
         for (int a = 0; a < 3; a++)
             level_verts[t * 3 + k][a] = c[corner[k]][a] * MESH_ONE / 1000;
@@ -46,7 +61,8 @@ static void build_level_mesh(void)
             const int c[4][3] = {{x0, fy, z0}, {x0, fy, z0 + 2000}, {x0 + 2000, fy, z0 + 2000}, {x0 + 2000, fy, z0}};
             uint8_t shade = (i + j) % 2 ? 60 : 90;
             const uint8_t color[3] = {shade, shade, shade + 10};
-            t = add_quad(t, c, color, 100);
+            const int below[3] = {x0 + 1000, fy - 1000, z0 + 1000}; /* seen from above only */
+            t = add_quad(t, c, below, color, 100);
         }
     }
     /* Box parts: flat-shaded by face direction so the edges read without lighting. Mesh
@@ -66,8 +82,9 @@ static void build_level_mesh(void)
             {{x1, y0, z0}, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}}, /* -Z */
         };
         static const int shade[5] = {100, 80, 80, 65, 65};
+        const int centre[3] = {p->x, fy + p->y, p->z};
         for (int f = 0; f < 5; f++)
-            t = add_quad(t, faces[f], p->color, shade[f]);
+            t = add_quad(t, faces[f], centre, p->color, shade[f]);
     }
     level_mesh.tris = t;
 }

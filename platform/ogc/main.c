@@ -163,6 +163,8 @@ static void draw_mesh(const mesh *m, Mtx mv)
 static void draw_scene(const world *w, const camera *cam)
 {
     const view *v = &cam->now;
+    /* triangles seen from behind (meshes are counter-clockwise from outside) are never drawn. GX takes clockwise as the front, so that's GX_CULL_FRONT. */
+    GX_SetCullMode(GX_CULL_FRONT);
     GX_SetViewport(0, 0, scene_w, SCREEN_H, 0, 1);
     GX_SetScissor(0, 0, scene_w, SCREEN_H);
     Mtx44 proj;
@@ -224,6 +226,7 @@ static void draw_scene(const world *w, const camera *cam)
  * nearest filtering (the VI and copy scalers can only filter). */
 static void draw_upscaled(void)
 {
+    GX_SetCullMode(GX_CULL_NONE);
     GX_SetTexCopySrc(0, 0, scene_w, SCREEN_H);
     GX_SetTexCopyDst(scene_w, SCREEN_H, GX_TF_RGBA8, GX_FALSE);
     GX_CopyTex(frame_tex, GX_TRUE);

@@ -89,6 +89,7 @@ static void draw_scene(const world *w, const camera *cam, int sw)
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE); /* triangles seen from behind (meshes are counter-clockwise from outside) are never drawn */
     glDisable(GL_TEXTURE_2D);
 
     glMatrixMode(GL_PROJECTION);
@@ -139,6 +140,7 @@ static void draw_scene(const world *w, const camera *cam, int sw)
  * matches the window's shape, so there are bars only past SCREEN_W_MAX wide or under 4:3. */
 static void present(SDL_Window *win, GLuint tex, int sw)
 {
+    glDisable(GL_CULL_FACE);
     glBindTexture(GL_TEXTURE_2D, tex);
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sw, SCREEN_H);
 
@@ -206,6 +208,7 @@ static void draw_chat(int sw)
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE); /* y runs down here, which turns quads over */
     glDisable(GL_TEXTURE_2D);
     int x = (sw - 256) / 2 + 2, y = (SCREEN_H + 192) / 2 - 2 - FONT_H;
     if (typing) {

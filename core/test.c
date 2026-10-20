@@ -270,6 +270,16 @@ static void test_experience_loader(void)
 
 static int imax(int a, int b) { return a > b ? a : b; }
 
+/* Triangle t's normal (counter-clockwise front), in mesh units, as doubles for the tests. */
+static void tri_normal(const mesh *m, int t, double n[3])
+{
+    const int16_t *a = m->verts[t * 3], *b = m->verts[t * 3 + 1], *c = m->verts[t * 3 + 2];
+    double u[3] = {b[0] - a[0], b[1] - a[1], b[2] - a[2]}, v[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+    n[0] = u[1] * v[2] - u[2] * v[1];
+    n[1] = u[2] * v[0] - u[0] * v[2];
+    n[2] = u[0] * v[1] - u[1] * v[0];
+}
+
 static void count_rect(int x, int y, int w, int h, void *ctx)
 {
     int *r = ctx; /* runs, lit pixels, then the first run's x, y, w */
@@ -337,6 +347,27 @@ static void test_avatar(const world *w)
     }
     assert(total <= 160 && abs(lo) <= 4 && hi > PLAYER_HEIGHT - 100 && hi <= PLAYER_HEIGHT);
     assert(avatar_parts[0][AVATAR_FACE].tris == 2); /* the front of the head */
+    for (int t = 0; t < 2; t++) { /* and faces front (-Z), counter-clockwise like everything */
+        double n[3];
+        tri_normal(&avatar_parts[0][AVATAR_FACE], t, n);
+        assert(n[2] < 0 && n[0] == 0 && n[1] == 0);
+    }
+    for (int k = 0; k < AVATAR_PARTS; k++) { /* each part's triangles mostly face away from its middle */
+        const mesh *m = &avatar_parts[0][k];
+        double mid[3] = {0, 0, 0};
+        for (int i = 0; i < m->tris * 3; i++)
+            for (int a = 0; a < 3; a++)
+                mid[a] += m->verts[i][a] / (m->tris * 3.0);
+        int out = 0;
+        for (int t = 0; t < m->tris; t++) {
+            double n[3], dot = 0;
+            tri_normal(m, t, n);
+            for (int a = 0; a < 3; a++)
+                dot += n[a] * ((m->verts[t * 3][a] + m->verts[t * 3 + 1][a] + m->verts[t * 3 + 2][a]) / 3.0 - mid[a]);
+            out += dot > 0;
+        }
+        assert(k == AVATAR_FACE || out * 10 >= m->tris * 8);
+    }
 
     /* A forearm hangs off its upper arm: at rest it's at its own joint; with the upper arm
      * swung straight ahead, the elbow comes forward to shoulder height and the forearm turns
@@ -671,6 +702,23 @@ int main(void)
     assert(level_mesh.colors[0][0] != level_mesh.colors[2][0]);
     const part *s1 = &pl.parts[1];
     assert(level_mesh.verts[(floor_tris + 10) * 3][1] == (FLOOR_Y * 1000 + s1->y + s1->sy / 2) * MESH_ONE / 1000);
+
+    /* Every triangle is counter-clockwise seen from outside (the platforms cull the rest):
+     * the floor faces up, each box's faces away from its middle. */
+    for (int t = 0; t < level_mesh.tris; t++) {
+        double n[3];
+        tri_normal(&level_mesh, t, n);
+        if (t < floor_tris) {
+            assert(n[1] > 0);
+            continue;
+        }
+        const part *box = &pl.parts[(t - floor_tris) / 10]; /* the first 7 parts are boxes */
+        double mid[3] = {box->x * MESH_ONE / 1000.0, (FLOOR_Y * 1000 + box->y) * MESH_ONE / 1000.0, box->z * MESH_ONE / 1000.0};
+        double dot = 0;
+        for (int a = 0; a < 3; a++)
+            dot += n[a] * ((level_mesh.verts[t * 3][a] + level_mesh.verts[t * 3 + 1][a] + level_mesh.verts[t * 3 + 2][a]) / 3.0 - mid[a]);
+        assert(dot > 0);
+    }
 
     /* Mesh parts collide as their box: the statue (x -7.8..-6.2, z -7.4..-6.6). */
     world near = w;

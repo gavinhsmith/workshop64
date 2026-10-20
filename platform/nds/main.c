@@ -113,7 +113,7 @@ int main(void)
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     gluPerspective(53, 256.0 / 192.0, 0.2, 100);
-    glPolyFmt(POLY_ALPHA(31) | POLY_CULL_NONE);
+    glPolyFmt(POLY_ALPHA(31) | POLY_CULL_BACK); /* triangles seen from behind (meshes are counter-clockwise from outside) are never drawn */
 
     if (experience_load(&pl, builtin_experience, builtin_experience_size) != PLACE_OK) {
         printf("built-in experience: %s\n", experience_error);

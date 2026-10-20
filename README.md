@@ -131,7 +131,8 @@ The icon is `icon.svg`. `tools/authoring/icons.py` (needs `rsvg-convert`) render
 Wii's Homebrew Channel and the web page's tab. Run it after changing the SVG and commit the
 results. The N64 and GameCube formats have no icon.
 
-Models are OBJ files exported Z-up with the front facing -Y (as from OwlCAD).
+Models are OBJ files exported Z-up with the front facing -Y (as from OwlCAD), with faces wound
+counter-clockwise seen from outside: every build culls faces seen from behind.
 
 ## CI
 

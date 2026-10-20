@@ -111,6 +111,7 @@ int main(void)
     glLoadIdentity();
     glFrustum(-0.1333f, 0.1333f, -0.1f, 0.1f, 0.2f, 100.0f);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE); /* triangles seen from behind (meshes are counter-clockwise from outside) are never drawn */
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
 
     assertf(experience_load(&pl, builtin_experience, builtin_experience_size) == PLACE_OK, "built-in experience: %s", experience_error);

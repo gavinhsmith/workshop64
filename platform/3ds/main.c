@@ -190,7 +190,7 @@ int main(void)
     BufInfo_Add(buf, vbo, sizeof(vertex), 3, 0x210);
 
     upload_textures();
-    C3D_CullFace(GPU_CULL_NONE);
+    C3D_CullFace(GPU_CULL_BACK_CCW); /* triangles seen from behind (meshes are counter-clockwise from outside) are never drawn */
 
     C3D_Mtx proj, identity;
     /* Same vertical view as every platform; the wide top screen sees more to the sides. */

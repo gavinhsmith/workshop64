@@ -83,16 +83,22 @@ static int cos10(int t)
     return sin10(t + 900);
 }
 
-/* One triangle (corners in thousandths from the feet) into part k, flat-shaded by how much
- * it faces a fixed light so the shape reads without lighting. */
-static void add_tri(int k, const int *a, const int *b, const int *c, int mat)
+/* One triangle (corners in thousandths from the feet) into part k, turned to face away from
+ * `inside` (a point inside its shape: platforms cull triangles seen from behind), and
+ * flat-shaded by how much it faces a fixed light so the shape reads without lighting. */
+static void add_tri(int k, const int *a, const int *b, const int *c, int mat, const int *inside)
 {
-    long long u[3], v[3];
+    long long u[3], v[3], m[3];
     for (int i = 0; i < 3; i++) {
         u[i] = b[i] - a[i];
         v[i] = c[i] - a[i];
+        m[i] = (a[i] + b[i] + c[i]) / 3 - inside[i];
     }
     long long n[3] = {u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]};
+    if (n[0] * m[0] + n[1] * m[1] + n[2] * m[2] < 0) { /* facing in: swap two corners */
+        const int *swap = b;
+        b = c, c = swap;
+    }
     static const long long light[3] = {400, 800, 450}; /* from above, front right; length ~1001 */
     long long len = isqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
     long long dot = llabs(n[0] * light[0] + n[1] * light[1] + n[2] * light[2]);
@@ -105,10 +111,10 @@ static void add_tri(int k, const int *a, const int *b, const int *c, int mat)
     shades[k][t] = (uint8_t)(len ? 55 + 45 * dot / (len * 1001) : 100);
 }
 
-static void add_quad(int k, const int *a, const int *b, const int *c, const int *d, int mat)
+static void add_quad(int k, const int *a, const int *b, const int *c, const int *d, int mat, const int *inside)
 {
-    add_tri(k, a, b, c, mat);
-    add_tri(k, a, c, d, mat);
+    add_tri(k, a, b, c, mat, inside);
+    add_tri(k, a, c, d, mat, inside);
 }
 
 /* A low-poly ellipsoid: `segs` around (the first starting `turn` tenths of a degree from
@@ -128,11 +134,11 @@ static void add_ellipsoid(int k, const int c[3], const int r[3], int segs, int t
                 p[i][2] = c[2] - r[2] * ring / 4096 * cos10(lo) / 4096;
             }
             if (lat[b] == -90)
-                add_tri(k, p[0], p[3], p[2], band_mat[b]);
+                add_tri(k, p[0], p[3], p[2], band_mat[b], c);
             else if (lat[b + 1] == 90)
-                add_tri(k, p[0], p[1], p[2], band_mat[b]);
+                add_tri(k, p[0], p[1], p[2], band_mat[b], c);
             else
-                add_quad(k, p[0], p[1], p[3], p[2], band_mat[b]);
+                add_quad(k, p[0], p[1], p[3], p[2], band_mat[b], c);
         }
     }
 }
@@ -149,7 +155,8 @@ static void add_frustum(int k, const int bot[3], const int rb[2], const int top[
             {top[0] + rt[0] * sin10(a1) / 4096, top[1], top[2] - rt[1] * cos10(a1) / 4096},
             {top[0] + rt[0] * sin10(a0) / 4096, top[1], top[2] - rt[1] * cos10(a0) / 4096},
         };
-        add_quad(k, p[0], p[1], p[2], p[3], mat);
+        const int mid[3] = {(bot[0] + top[0]) / 2, (bot[1] + top[1]) / 2, (bot[2] + top[2]) / 2};
+        add_quad(k, p[0], p[1], p[2], p[3], mat, mid);
     }
 }
 
@@ -168,10 +175,11 @@ static void add_prism(int k, const int a[3], const int b[3], int half, int mat)
         c[i][1] = end[1] + u * oy;
         c[i][2] = end[2] + w * half;
     }
-    add_quad(k, c[0], c[1], c[5], c[4], mat);
-    add_quad(k, c[1], c[3], c[7], c[5], mat);
-    add_quad(k, c[3], c[2], c[6], c[7], mat);
-    add_quad(k, c[2], c[0], c[4], c[6], mat);
+    const int mid[3] = {(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2};
+    add_quad(k, c[0], c[1], c[5], c[4], mat, mid);
+    add_quad(k, c[1], c[3], c[7], c[5], mat, mid);
+    add_quad(k, c[3], c[2], c[6], c[7], mat, mid);
+    add_quad(k, c[2], c[0], c[4], c[6], mat, mid);
 }
 
 static void build_geometry(void)
@@ -190,14 +198,20 @@ static void build_geometry(void)
         {x0, y0, z0}, {x1, y0, z0}, {x0, y1, z0}, {x1, y1, z0},
         {x0, y0, z1}, {x1, y0, z1}, {x0, y1, z1}, {x1, y1, z1},
     };
-    add_quad(AVATAR_HEAD, c[2], c[6], c[7], c[3], SKIN); /* top */
-    add_quad(AVATAR_HEAD, c[0], c[1], c[5], c[4], SKIN); /* bottom */
-    add_quad(AVATAR_HEAD, c[7], c[6], c[4], c[5], SKIN); /* back */
-    add_quad(AVATAR_HEAD, c[3], c[7], c[5], c[1], SKIN); /* +X */
-    add_quad(AVATAR_HEAD, c[6], c[2], c[0], c[4], SKIN); /* -X */
-    add_quad(AVATAR_FACE, c[3], c[2], c[0], c[1], FACE_LIT); /* front: top left as seen from the front first */
-    static const int16_t face_uv[6][2] = {{0, 0}, {MESH_ONE, 0}, {MESH_ONE, MESH_ONE}, {0, 0}, {MESH_ONE, MESH_ONE}, {0, MESH_ONE}};
-    memcpy(face_uvs, face_uv, sizeof face_uv);
+    const int middle[3] = {(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2};
+    add_quad(AVATAR_HEAD, c[2], c[6], c[7], c[3], SKIN, middle); /* top */
+    add_quad(AVATAR_HEAD, c[0], c[1], c[5], c[4], SKIN, middle); /* bottom */
+    add_quad(AVATAR_HEAD, c[7], c[6], c[4], c[5], SKIN, middle); /* back */
+    add_quad(AVATAR_HEAD, c[3], c[7], c[5], c[1], SKIN, middle); /* +X */
+    add_quad(AVATAR_HEAD, c[6], c[2], c[0], c[4], SKIN, middle); /* -X */
+    add_quad(AVATAR_FACE, c[3], c[2], c[0], c[1], FACE_LIT, middle); /* front: top left as seen from the front first */
+    /* The face texture straight on: its left edge on the avatar's +X (the viewer's left). */
+    for (int i = 0; i < tris[AVATAR_FACE] * 3; i++) {
+        const int16_t *v = verts[AVATAR_FACE][i];
+        int x = avatar_joints[AVATAR_FACE][0] + v[0] * 1000 / MESH_ONE, y = avatar_joints[AVATAR_FACE][1] + v[1] * 1000 / MESH_ONE;
+        face_uvs[i][0] = (int16_t)((x1 - x) * MESH_ONE / (x1 - x0));
+        face_uvs[i][1] = (int16_t)((y1 - y) * MESH_ONE / (y1 - y0));
+    }
 
     /* Body: a dress, wide at the hem and narrow at the neck (the head covers its top; the hem
      * is open, as nothing sees under it). */
