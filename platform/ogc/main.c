@@ -57,21 +57,21 @@ static void upload_textures(void)
 
 static GXRModeObj mode;
 static void *xfb[2];
-static void *frame_tex;      /* the 320x240 frame, as an RGBA8 texture */
-static float aspect = 4.0f / 3.0f; /* of the TV picture */
+static void *frame_tex;      /* the frame, as an RGBA8 texture */
+static int scene_w = SCREEN_W; /* the frame is scene_w x SCREEN_H: wider when the Wii is set to 16:9 */
 
 static const GXColor BG = {25, 25, 38, 255};
 static const GXColor BLACK = {0, 0, 0, 255};
 
-/* Clear the 320x240 scene area to the background (and far Z). A texture copy is the
+/* Clear the scene area to the background (and far Z). A texture copy is the
  * only way GX clears part of the EFB; the copied pixels are overwritten next frame.
  * Copy clears only touch Z while Z updates are enabled. */
 static void clear_scene_area(void)
 {
     GX_SetZMode(GX_TRUE, GX_LEQUAL, GX_TRUE);
     GX_SetCopyClear(BG, GX_MAX_Z24);
-    GX_SetTexCopySrc(0, 0, SCREEN_W, SCREEN_H);
-    GX_SetTexCopyDst(SCREEN_W, SCREEN_H, GX_TF_RGBA8, GX_FALSE);
+    GX_SetTexCopySrc(0, 0, scene_w, SCREEN_H);
+    GX_SetTexCopyDst(scene_w, SCREEN_H, GX_TF_RGBA8, GX_FALSE);
     GX_CopyTex(frame_tex, GX_TRUE);
     GX_SetCopyClear(BLACK, GX_MAX_Z24);
 }
@@ -117,14 +117,14 @@ static void video_init(void)
     GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
     GX_SetNumTevStages(1);
 
-    frame_tex = memalign(32, GX_GetTexBufferSize(SCREEN_W, SCREEN_H, GX_TF_RGBA8, GX_FALSE, 0));
 #ifdef HW_RVL
-    /* Wii set to 16:9: the TV stretches the picture to widescreen, so draw a wider view into
-     * the same frame (each pixel ends up wider than tall). The height, and so the vertical
-     * view, stays the same as in 4:3. */
+    /* Wii set to 16:9: the same 240 lines, with more columns for the wider view: 428 (240 x 16/9,
+     * to a multiple of 4 for texture copies). They are scaled to the 640-wide frame, which the
+     * TV stretches to widescreen. */
     if (CONF_GetAspectRatio() == CONF_ASPECT_16_9)
-        aspect = 16.0f / 9.0f;
+        scene_w = 428;
 #endif
+    frame_tex = memalign(32, GX_GetTexBufferSize(scene_w, SCREEN_H, GX_TF_RGBA8, GX_FALSE, 0));
     clear_scene_area();
 }
 
@@ -160,13 +160,13 @@ static void draw_mesh(const mesh *m, Mtx mv)
     }
 }
 
-/* Pass 1: the 3D scene into the top-left 320x240 of the EFB. */
+/* Pass 1: the 3D scene into the top-left scene_w x 240 of the EFB. */
 static void draw_scene(const world *w, const view *v)
 {
-    GX_SetViewport(0, 0, SCREEN_W, SCREEN_H, 0, 1);
-    GX_SetScissor(0, 0, SCREEN_W, SCREEN_H);
+    GX_SetViewport(0, 0, scene_w, SCREEN_H, 0, 1);
+    GX_SetScissor(0, 0, scene_w, SCREEN_H);
     Mtx44 proj;
-    guPerspective(proj, 53.0f, aspect, 0.2f, 100.0f);
+    guPerspective(proj, 53.0f, (f32)scene_w / SCREEN_H, 0.2f, 100.0f);
     GX_LoadProjectionMtx(proj, GX_PERSPECTIVE);
 
     GX_ClearVtxDesc();
@@ -208,18 +208,18 @@ static void draw_scene(const world *w, const view *v)
     }
 }
 
-/* Pass 2: copy the 320x240 frame to a texture and draw it over the whole EFB with
+/* Pass 2: copy the frame to a texture and draw it over the whole EFB with
  * nearest filtering (the VI and copy scalers can only filter). */
 static void draw_upscaled(void)
 {
-    GX_SetTexCopySrc(0, 0, SCREEN_W, SCREEN_H);
-    GX_SetTexCopyDst(SCREEN_W, SCREEN_H, GX_TF_RGBA8, GX_FALSE);
+    GX_SetTexCopySrc(0, 0, scene_w, SCREEN_H);
+    GX_SetTexCopyDst(scene_w, SCREEN_H, GX_TF_RGBA8, GX_FALSE);
     GX_CopyTex(frame_tex, GX_TRUE);
     GX_PixModeSync();
     GX_InvalidateTexAll();
 
     GXTexObj tex;
-    GX_InitTexObj(&tex, frame_tex, SCREEN_W, SCREEN_H, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
+    GX_InitTexObj(&tex, frame_tex, scene_w, SCREEN_H, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
     GX_InitTexObjLOD(&tex, GX_NEAR, GX_NEAR, 0.0f, 0.0f, 0.0f, GX_FALSE, GX_FALSE, GX_ANISO_1);
     GX_LoadTexObj(&tex, GX_TEXMAP0);
 

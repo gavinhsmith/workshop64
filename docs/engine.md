@@ -28,8 +28,8 @@ Each item is marked:
 4. **The look is fixed.** *Decided.* 240 lines high everywhere (DS 192), scaled up
    nearest-neighbour, 16-colour textures, static lighting. The width follows the screen's shape:
    320 on a 4:3 screen, wider on wider ones (3DS top screen 400, a 16:9 window about 427), with
-   the same vertical view, so wider screens see more to the sides. The Wii follows its 4:3 / 16:9
-   setting, drawing 16:9 into its usual frame for the TV to stretch.
+   the same vertical view, so wider screens see more to the sides. Wider screens add columns, never
+   fewer lines. The Wii follows its 4:3 / 16:9 setting (428 columns in 16:9).
 5. **The engine is not a general game engine.** *Decided.* No standalone export: experiences run
    inside workbench64, never as their own ROM or executable.
 6. **Untrusted content is validated on load.** *Decided.* Every `.wb64`, whatever its source, is
