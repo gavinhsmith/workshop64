@@ -6,7 +6,8 @@ CORE_MK_GOAL := $(.DEFAULT_GOAL)
 ROOT     ?= ../..
 CORE     := $(ROOT)/core
 GEN      := $(ROOT)/build/gen
-PYTHON   ?= python3
+# python3, or python where python3 doesn't run (on Windows it's often the Store stub).
+PYTHON   ?= $(if $(shell python3 -c "print(1)" 2>/dev/null),python3,python)
 LUA      := $(ROOT)/third_party/lua
 CORE_SRC := world.c wb64.c lua.c
 GEN_SRC  := guy_mesh.c builtin_experience.c

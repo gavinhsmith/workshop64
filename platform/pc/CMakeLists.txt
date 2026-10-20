@@ -38,8 +38,9 @@ if(NOT WIN32)
     target_link_libraries(hangout64 PRIVATE m)
 endif()
 target_link_libraries(hangout64 PRIVATE SDL3::SDL3 OpenGL::GL)
-# Same output dir for every generator/config, so CI knows where to look.
-set_target_properties(hangout64 PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/bin>)
+# The finished program goes to build/pc, wherever CMake's own files are, for every generator
+# and config ($<1:...> stops multi-config generators adding a Debug/Release folder).
+set_target_properties(hangout64 PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${ROOT}/build/pc>)
 if(APPLE)
     target_compile_definitions(hangout64 PRIVATE GL_SILENCE_DEPRECATION)
 endif()

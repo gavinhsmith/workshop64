@@ -9,11 +9,11 @@ This is the prototype for **workbench64**, a small Roblox-like platform; see the
 | Folder | Platform | Library | Output |
 |---|---|---|---|
 | `core/` | shared game code (no platform headers) | — | — |
-| `platform/n64/` | Nintendo 64 | libdragon (preview, OpenGL) | `.z64` |
-| `platform/ogc/` | GameCube + Wii | libogc (GX) | `.dol` ×2 |
-| `platform/nds/` | DS | libnds | `.nds` |
-| `platform/3ds/` | 3DS | libctru + citro3d | `.3dsx` |
-| `platform/pc/` | Windows / Linux / macOS | SDL3 + OpenGL | executable |
+| `platform/n64/` | Nintendo 64 | libdragon (preview, OpenGL) | `build/n64/hangout64.z64` |
+| `platform/ogc/` | GameCube + Wii | libogc (GX) | `build/ogc/hangout64_gamecube.dol`, `_wii.dol` |
+| `platform/nds/` | DS | libnds | `build/nds/hangout64.nds` |
+| `platform/3ds/` | 3DS | libctru + citro3d | `build/3ds/hangout64.3dsx` |
+| `platform/pc/` | Windows / Linux / macOS | SDL3 + OpenGL | `build/pc/hangout64` |
 | `platform/web/` | browsers | Emscripten, SDL3 + WebGL | `build/web/` (html + js + wasm) |
 
 `tools/` holds the scripts the build runs; `tools/authoring/` holds ones you run by hand when
@@ -45,8 +45,10 @@ same with the browser window.
 
 Every build needs Python 3 (standard library only): the avatar and the built-in experience
 are generated into `build/gen` from `assets/` and `experiences/course/`. Lua is a submodule:
-clone with `--recursive` or run `git submodule update --init`. On Windows, where `python3` may
-be the Store stub, pass `PYTHON=python` to make.
+clone with `--recursive` or run `git submodule update --init`. On Windows, `make pc` and
+`make test` use MSYS2's UCRT64 gcc and SDL3 (with `C:\msys64\ucrt64\bin` on PATH); from Git
+Bash, put that folder before Git's own `/mingw64/bin`, or gcc picks up the wrong DLLs and fails
+without a message.
 
 ```sh
 make test   # core unit tests (host compiler)
@@ -59,6 +61,8 @@ make web    # also in Docker
 make        # everything
 make n64-reset  # drop the cached N64 toolchain + libdragon volume (e.g. after an image update)
 ```
+
+Finished files go to `build/<platform>/` (see the table above).
 
 ## Running
 

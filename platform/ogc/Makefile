@@ -10,7 +10,7 @@ all:
 	$(MAKE) PLATFORM=wii
 
 clean:
-	rm -rf build *.dol
+	rm -rf build *.dol ../../build/ogc
 
 .PHONY: all clean
 
@@ -20,14 +20,16 @@ include $(DEVKITPPC)/$(PLATFORM)_rules
 include ../../core/core.mk
 
 TARGET := hangout64_$(PLATFORM)
+OUT    := $(ROOT)/build/ogc
 BUILD  := build/$(PLATFORM)
 OBJS   := $(BUILD)/main.o $(addprefix $(BUILD)/,$(CORE_OBJ))
 CFLAGS := -O2 -Wall $(MACHDEP) -I$(LIBOGC_INC) $(CORE_INC) -MMD -MP
 LIBS   := -L$(LIBOGC_LIB) $(if $(filter wii,$(PLATFORM)),-lwiiuse -lbte) -logc -lm
 
-.DEFAULT_GOAL := $(TARGET).dol
+.DEFAULT_GOAL := $(OUT)/$(TARGET).dol
 
-$(TARGET).dol: $(BUILD)/$(TARGET).elf
+$(OUT)/$(TARGET).dol: $(BUILD)/$(TARGET).elf
+	@mkdir -p $(dir $@)
 	elf2dol $< $@
 	$(PYTHON) $(ROOT)/tools/dolpad.py $@
 

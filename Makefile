@@ -23,9 +23,15 @@ all: test pc $(CONSOLES)
 test:
 	$(MAKE) -C core test
 
+# Finished files go to build/<platform>; CMake keeps its own files in build/cmake. On Windows,
+# use MinGW (MSYS2's gcc and SDL3): CMake's default there, Visual Studio, can't build against
+# MSYS2's SDL3. Set CMAKE_ARGS to choose otherwise (delete build/cmake when switching).
+ifeq ($(OS),Windows_NT)
+CMAKE_ARGS ?= -G "MinGW Makefiles" -DCMAKE_MAKE_PROGRAM="$(MAKE)"
+endif
 pc:
-	cmake -S platform/pc -B build/pc
-	cmake --build build/pc
+	cmake -S platform/pc -B build/cmake $(CMAKE_ARGS)
+	cmake --build build/cmake
 
 $(CONSOLES):
 	docker run --rm $(DOCKER_ARGS_$@) -v "$(CURDIR):/src" -w /src/platform/$@ $(IMAGE_$@) make

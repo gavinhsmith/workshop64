@@ -24,10 +24,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { platform: n64, image: 'ghcr.io/dragonminded/libdragon:preview', out: 'platform/n64/*.z64' }
-          - { platform: ogc, image: 'devkitpro/devkitppc:latest', out: 'platform/ogc/*.dol' }
-          - { platform: nds, image: 'devkitpro/devkitarm:latest', out: 'platform/nds/*.nds' }
-          - { platform: 3ds, image: 'devkitpro/devkitarm:latest', out: 'platform/3ds/*.3dsx' }
+          - { platform: n64, image: 'ghcr.io/dragonminded/libdragon:preview', out: 'build/n64/' }
+          - { platform: ogc, image: 'devkitpro/devkitppc:latest', out: 'build/ogc/' }
+          - { platform: nds, image: 'devkitpro/devkitarm:latest', out: 'build/nds/' }
+          - { platform: 3ds, image: 'devkitpro/devkitarm:latest', out: 'build/3ds/' }
           - { platform: web, image: 'emscripten/emsdk:latest', out: 'build/web/' }
     container: ${{ matrix.image }}
     steps:
@@ -61,12 +61,12 @@ jobs:
           version: 3-latest
           install-linux-dependencies: true
           cmake-arguments: -DSDL_SHARED=OFF -DSDL_STATIC=ON
-      - run: cmake -S platform/pc -B build/pc -DCMAKE_BUILD_TYPE=Release
-      - run: cmake --build build/pc --config Release
+      - run: cmake -S platform/pc -B build/cmake -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/cmake --config Release
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: build/pc/bin/
+          path: build/pc/
           if-no-files-found: error
 
   release:

@@ -13,9 +13,12 @@ CFLAGS  := -O2 -Wall $(ARCH) -D__3DS__ -I$(CTRULIB)/include $(CORE_INC) -MMD -MP
 LDFLAGS := -specs=3dsx.specs $(ARCH)
 LIBS    := -L$(CTRULIB)/lib -lcitro3d -lctru -lm
 
-all: $(TARGET).3dsx
+OUT     := $(ROOT)/build/3ds
 
-$(TARGET).3dsx: $(BUILD)/$(TARGET).elf
+all: $(OUT)/$(TARGET).3dsx
+
+$(OUT)/$(TARGET).3dsx: $(BUILD)/$(TARGET).elf
+	@mkdir -p $(dir $@)
 	3dsxtool $< $@
 
 $(BUILD)/$(TARGET).elf: $(OBJS)
@@ -44,7 +47,7 @@ $(BUILD):
 	mkdir -p $@
 
 clean:
-	rm -rf $(BUILD) *.3dsx
+	rm -rf $(BUILD) *.3dsx $(OUT)
 
 .PHONY: all clean
 

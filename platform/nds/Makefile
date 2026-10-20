@@ -24,7 +24,16 @@ OFILES   := $(OBJS)
 LDFLAGS  := -specs=ds_arm9.specs $(ARCH)
 LIBS     := -lnds9 -lm
 
-all: $(TARGET).nds
+OUT := $(ROOT)/build/nds
+
+all: $(OUT)/$(TARGET).nds
+
+# ds_rules builds the ROM here; it's then moved to $(OUT) (make deletes the intermediate
+# copy, and only rebuilds it when the ELF changes).
+.INTERMEDIATE: $(TARGET).nds
+$(OUT)/$(TARGET).nds: $(TARGET).nds
+	@mkdir -p $(dir $@)
+	cp $< $@
 
 $(TARGET).nds: $(TARGET).elf
 
@@ -43,7 +52,7 @@ $(BUILD):
 	mkdir -p $@
 
 clean:
-	rm -rf $(BUILD) *.elf *.nds *.lst
+	rm -rf $(BUILD) *.elf *.nds *.lst $(OUT)
 
 .PHONY: all clean
 
